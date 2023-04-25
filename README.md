@@ -1,5 +1,5 @@
 # Asus Router <=> USB <=> Raspberry Pi
-### Connecting Raspberry Pi to LAN through USB port on stock Asus router
+### Connecting Raspberry Pi to LAN through USB port on Asus router
 
 This makes any Raspberry Pi capable of becoming USB Gadget to connect to LAN network through router's USB port.
 
@@ -7,17 +7,17 @@ Great way to run [Pi-hole](https://pi-hole.net) in your network on a budget Rasp
 
 **Warning: This cannot be used together with Entware/Optware/Asus Download Master on stock firmware.**
 
-This will also work with Merlin firmware - [see below](#Asuswrt-Merlin).
+Everything here was tested on **RT-AX58U v2** on official **388.2** firmware.
 
 ## How it works
 
-Asus routers with stock firmware have the capability to run a script when USB storage device is mounted.
+Asus routers have the capability to run a script when USB storage device is mounted.
 
 This is how this magic is happening:
 
 - Router is booting, at one point USB port gets powered and Pi starts booting as well
 - Pi pretends to be USB storage device, router mounts it and triggers the script
-- The script on the router write a file to the mass storage device
+- The script on the router writes a file to the mass storage device
 - The script on the Pi detects that and transforms itself into USB Ethernet gadget
 - The script on the router waits for the new network interface to become available and then enables it and adds it to the LAN bridge interface
 - The Pi is now a member of your LAN network
@@ -52,6 +52,8 @@ curl "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master/
 ```
 
 _This will install [usb-network.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/usb-network.sh) and modified [startup.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/startup.sh) scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
+
+_On Merlin firmware it will use `services-start` scripts instead of `startup.sh`._
 
 ### **Finish**
 
