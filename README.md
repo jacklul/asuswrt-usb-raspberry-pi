@@ -41,6 +41,8 @@ Then enable it:
 sudo systemctl enable asuswrt-usb-network.service
 ```
 
+If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true` in `/etc/asuswrt-usb-network.conf`.
+
 ### **On the Asus router:**
 
 Enable the SSH access in the router, connect to it and then execute this command to install required scripts:
@@ -60,11 +62,3 @@ Power off the router, connect your Pi to router's USB port and then turn the rou
 You can override configuration variables in `/etc/asuswrt-usb-network.conf`.
 
 To see the list of possible variables peek into [asuswrt-usb-network.sh](asuswrt-usb-network.sh).
-
-## Asuswrt-Merlin
-
-If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) the setup is even simplier:
-
-- set `SKIP_MASS_STORAGE=true` in `/etc/asuswrt-usb-network.conf`
-- do not run `install_router.sh` on the router
-- manually place `usb-network.sh` script in `/jffs/scripts` directory and add `/jffs/scripts/usb-network.sh start &` line to `/jffs/scripts/services-start` ([reference](https://github.com/RMerl/asuswrt-merlin.ng/wiki/User-scripts))
