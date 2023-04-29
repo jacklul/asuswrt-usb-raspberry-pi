@@ -37,11 +37,9 @@ GADGET_DEVICE_PROTOCOL="0x01"    # 0x01 = Interface Association Descriptor proto
 GADGET_MAX_PACKET_SIZE="0x40"    # declare max packet size, decimal or hex
 GADGET_ATTRIBUTES="0x80"    # 0xc0 = self powered, 0x80 = bus powered
 GADGET_MAX_POWER="250"    # declare max power usage, decimal or hex
-GADGET_MAC_BASE="$(echo "$GADGET_SERIAL" | sed 's/\(\w\w\)/:\1/g' | cut -b 2-)"    # base MAC address generated from CPU serial
-GADGET_MAC_HOST_PREFIX="02"    # prefix to use in generated MAC address
-GADGET_MAC_DEVICE_PREFIX="12"    # prefix to use in generated MAC address
-GADGET_MAC_HOST=""    # if empty MAC address is generated from CPU serial
-GADGET_MAC_DEVICE=""    # if empty MAC address is generated from CPU serial
+GADGET_MAC_VENDOR="B8:27:EB"    # vendor MAC prefix to use in generated MAC address (B8:27:EB = Raspberry Pi Foundation)
+GADGET_MAC_HOST=""    # host MAC address, if empty - MAC address is generated from GADGET_MAC_VENDOR and CPU serial
+GADGET_MAC_DEVICE=""    # device MAC address, if empty - MAC address is generated from CPU serial with 02: prefix
 GADGET_STORAGE_FILE="/tmp/$GADGET_ID.img"    # path to the temporary image file that will be created and mounted
 GADGET_STORAGE_STALL=""    # change value of stall option, empty means default
 
@@ -55,7 +53,7 @@ readonly CONFIGFS_DEVICE_PATH="/sys/kernel/config/usb_gadget/$GADGET_ID"
 ##################################################
 
 gadget_up() {
-	local FUNCTION="${1:lower}"
+	local FUNCTION="$(echo "$1" | awk '{print tolower($0)}')"
 	local CONFIG="c.1"
 	local INSTANCE="0"
 
@@ -167,9 +165,28 @@ gadget_down() {
 }
 
 generate_mac_addresses() {
-	local GADGET_MAC_BASE_CUT="$(echo "$GADGET_MAC_BASE" | cut -b 3-)"
-	[ -z "$GADGET_MAC_HOST" ] && GADGET_MAC_HOST="${GADGET_MAC_HOST_PREFIX}${GADGET_MAC_BASE_CUT}"
-	[ -z "$GADGET_MAC_DEVICE" ] && GADGET_MAC_DEVICE="${GADGET_MAC_DEVICE_PREFIX}${GADGET_MAC_BASE_CUT}"
+	local GADGET_SERIAL_LOWER="$(echo "$GADGET_SERIAL" | awk '{print tolower($0)}')"
+
+	[ -z "$GADGET_MAC_DEVICE" ] && GADGET_MAC_DEVICE="02:$(echo "$GADGET_SERIAL_LOWER" | sed 's/\(\w\w\)/:\1/g' | cut -b 5-)"
+
+	if [ "$(echo "$GADGET_MAC_DEVICE" | awk -F":" '{print NF-1}')" != "5" ]; then
+		echo "Invalid device MAC address: $GADGET_MAC_DEVICE"
+		exit 1
+	fi
+
+	if [ -z "$GADGET_MAC_HOST" ]; then
+		if [ "$(echo "$GADGET_MAC_VENDOR" | awk -F":" '{print NF-1}')" != "2" ]; then
+			echo "Invalid value for \"GADGET_MAC_VENDOR\" variable!"
+			exit 22
+		fi
+		
+		GADGET_MAC_HOST="$(echo "$GADGET_MAC_VENDOR" | awk '{print tolower($0)}'):$(echo "$GADGET_SERIAL_LOWER" | sed 's/\(\w\w\)/:\1/g' | cut -b 11-)"
+	fi
+
+	if [ "$(echo "$GADGET_MAC_HOST" | awk -F":" '{print NF-1}')" != "5" ]; then
+		echo "Invalid host MAC address: $GADGET_MAC_HOST"
+		exit 1
+	fi
 }
 
 is_started() {
@@ -276,18 +293,26 @@ case "$1" in
 			echo "Gadget \"$GADGET_ID\" is not running."
 		fi
 
-		echo ""
-		generate_mac_addresses
-
-		echo "Host MAC address: $GADGET_MAC_HOST"
-		echo "Device MAC address: $GADGET_MAC_DEVICE"
-
-		FUNCTION="${NETWORK_FUNCTION:lower}"
+		FUNCTION="$(echo "$NETWORK_FUNCTION" | awk '{print tolower($0)}')"
 		if [ -f "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname" ]; then
 			INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname")"
 			IP_ADDRESS="$(ip -f inet addr show "$INTERFACE" | sed -En -e 's/.*inet ([0-9.]+).*/\1/p')"
+			MAC_ADDRESS="$(ip -f link addr show "$INTERFACE" | sed -En -e 's/.*link.*([0-9a-fA-F:]{17}) .*/\1/p')"
+		else
+			echo "No such function: $CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0"
+		fi
 
-			echo "IP address: $IP_ADDRESS"
+		echo ""
+		generate_mac_addresses
+
+		[ -n "$IP_ADDRESS" ] && echo "IP address: $IP_ADDRESS"
+		[ -n "$GADGET_MAC_DEVICE" ] && echo "Device MAC address: $GADGET_MAC_DEVICE"
+
+		if [ -n "$MAC_ADDRESS" ] && [ "$MAC_ADDRESS" != "$GADGET_MAC_HOST" ]; then
+			echo "Host MAC address (actual): $MAC_ADDRESS"
+			echo "Host MAC address (config): $GADGET_MAC_HOST"
+		else
+			echo "Host MAC address: $GADGET_MAC_HOST"
 		fi
 	;;
 	*)
