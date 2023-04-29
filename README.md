@@ -47,8 +47,8 @@ If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MAS
 
 Enable the SSH access in the router, connect to it and then execute this command to install required scripts:
 
-```bash
-curl "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master/install_router.sh" | sh
+```sh
+curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master/install_router.sh" | sh
 ```
 
 _This will install [usb-network.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/usb-network.sh) and modified [startup.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/startup.sh) scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
@@ -64,3 +64,36 @@ Power off the router, connect your Pi to router's USB port and then turn the rou
 You can override configuration variables in `/etc/asuswrt-usb-network.conf`.
 
 To see the list of possible variables peek into [asuswrt-usb-network.sh](asuswrt-usb-network.sh).
+
+## Recommended setup for Pi-hole on a Pi (Zero)
+
+I recommended to also install [`force-dns.sh`](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/force-dns.sh) script to force LAN and Guest WiFi clients to use the Pi-hole:
+
+```sh
+curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/force-dns.sh" -o /jffs/scripts/force-dns.sh && chmod +x /jffs/scripts/force-dns.sh
+```
+
+_There are also other useful scripts so make sure to check [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts)._
+
+Edit `force-dns.conf`:
+```sh
+vi /jffs/scripts/force-dns.conf
+```
+
+And paste the following:
+```
+PERMIT_MAC="01:02:03:04:05:06"
+#PERMIT_IP="192.168.1.251-192.168.1.254"
+REQUIRE_INTERFACE="usb*"
+BLOCK_ROUTER_DNS=true
+#FALLBACK_DNS_SERVER="9.9.9.9"
+```
+
+Replace `01:02:03:04:05:06` with the MAC address of the `usb0` interface on the Pi - to grab it execute the following command on the Pi:
+```bash
+sudo asuswrt-usb-network status
+```
+The `Host MAC` is the value you want to use.
+
+You can add IPs or IP ranges to `PERMIT_IP` variable to prevent that IPs from having their DNS server forced.
+Use `FALLBACK_DNS_SERVER` in case the Pi disconnects from the router, it can also be set to the router's IP address.

@@ -95,9 +95,7 @@ gadget_up() {
 		"ecm"|"rndis"|"eem"|"ncm")
 			mkdir "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE"
 
-			local GADGET_MAC_BASE_CUT="$(echo "$GADGET_MAC_BASE" | cut -b 3-)"
-			[ -z "$GADGET_MAC_HOST" ] && GADGET_MAC_HOST="${GADGET_MAC_HOST_PREFIX}${GADGET_MAC_BASE_CUT}"
-			[ -z "$GADGET_MAC_DEVICE" ] && GADGET_MAC_DEVICE="${GADGET_MAC_DEVICE_PREFIX}${GADGET_MAC_BASE_CUT}"
+			generate_mac_addresses
 
 			echo "$GADGET_MAC_HOST"  > "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE/dev_addr"
 			echo "$GADGET_MAC_DEVICE" > "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE/host_addr"
@@ -166,6 +164,12 @@ gadget_down() {
 		
 		rmdir "$CONFIGFS_DEVICE_PATH"
 	fi
+}
+
+generate_mac_addresses() {
+	local GADGET_MAC_BASE_CUT="$(echo "$GADGET_MAC_BASE" | cut -b 3-)"
+	[ -z "$GADGET_MAC_HOST" ] && GADGET_MAC_HOST="${GADGET_MAC_HOST_PREFIX}${GADGET_MAC_BASE_CUT}"
+	[ -z "$GADGET_MAC_DEVICE" ] && GADGET_MAC_DEVICE="${GADGET_MAC_DEVICE_PREFIX}${GADGET_MAC_BASE_CUT}"
 }
 
 is_started() {
@@ -265,8 +269,29 @@ case "$1" in
 	"stop")
 		gadget_down
 	;;
+	"status")
+		if [ -d "$CONFIGFS_DEVICE_PATH" ] && [ -n "$(cat "$CONFIGFS_DEVICE_PATH/UDC")" ]; then
+			echo "Gadget \"$GADGET_ID\" is running."
+		else
+			echo "Gadget \"$GADGET_ID\" is not running."
+		fi
+
+		echo ""
+		generate_mac_addresses
+
+		echo "Host MAC address: $GADGET_MAC_HOST"
+		echo "Device MAC address: $GADGET_MAC_DEVICE"
+
+		FUNCTION="${NETWORK_FUNCTION:lower}"
+		if [ -f "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname" ]; then
+			INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname")"
+			IP_ADDRESS="$(ip -f inet addr show "$INTERFACE" | sed -En -e 's/.*inet ([0-9.]+).*/\1/p')"
+
+			echo "IP address: $IP_ADDRESS"
+		fi
+	;;
 	*)
-		echo "Usage: $0 start|stop"
+		echo "Usage: $0 start|stop|status"
 		exit 1
 	;;
 esac
