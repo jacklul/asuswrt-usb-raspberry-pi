@@ -10,8 +10,6 @@
 
 # shellcheck disable=2155,1090
 
-[ "$UID" -eq 0 ] || { echo "This script must run as root!"; exit 1; }
-
 # Configuration variables
 NETWORK_FUNCTION="ecm"    # network function to use, supported: ecm (recommended), rndis, eem, ncm
 VERIFY_CONNECTION=true    # verify that we can reach gateway after enabling network gadget
@@ -45,12 +43,18 @@ GADGET_STORAGE_STALL=""    # change value of stall option, empty means default
 
 readonly CONFIG_FILE="/etc/asuswrt-usb-network.conf"
 if [ -f "$CONFIG_FILE" ]; then
+	[ ! -r "$CONFIG_FILE" ] && { echo "Unable to read $CONFIG_FILE"; exit 1; }
+
 	. "$CONFIG_FILE"
 fi
 
 readonly CONFIGFS_DEVICE_PATH="/sys/kernel/config/usb_gadget/$GADGET_ID"
 
 ##################################################
+
+require_root() {
+	[ "$UID" -eq 0 ] || { echo "This script must run as root!"; exit 1; }
+}
 
 gadget_up() {
 	local FUNCTION="$(echo "$1" | awk '{print tolower($0)}')"
@@ -224,6 +228,7 @@ interrupt() {
 
 case "$1" in
 	"start")
+		require_root
 		is_started && { echo "Startup already complete"; exit; }
 
 		trap interrupt SIGINT SIGTERM SIGQUIT
@@ -284,6 +289,7 @@ case "$1" in
 		echo "Completed successfully"
 	;;
 	"stop")
+		require_root
 		gadget_down
 	;;
 	"status")
