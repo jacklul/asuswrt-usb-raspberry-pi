@@ -55,15 +55,17 @@ _This will install [usb-network.sh](https://github.com/jacklul/asuswrt-scripts/b
 
 _On Merlin firmware it will use `services-start` scripts instead of `startup.sh`._
 
-### **Finish**
-
-Power off the router, connect your Pi to router's USB port and then turn the router on - in a few minutes it should all be working smoothly!
-
 ## Configuration
 
 You can override configuration variables in `/etc/asuswrt-usb-network.conf`.
 
 To see the list of possible variables peek into [asuswrt-usb-network.sh](asuswrt-usb-network.sh).
+
+### **Finish**
+
+Power off the router, connect your Pi to router's USB port and then turn the router on - in a few minutes it should all be working smoothly!
+
+If it does not then your router might be missing support for executing command in `script_usbmount` NVRAM variable on USB mount - in that case set `FAKE_ASUS_OPTWARE=true` in the configuration, you might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router.
 
 ## Recommended setup for Pi-hole on a Pi (Zero)
 

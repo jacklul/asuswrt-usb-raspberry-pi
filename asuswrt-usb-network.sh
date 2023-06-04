@@ -21,6 +21,8 @@ WAIT_SLEEP=1    # time to sleep between each image contents checks
 TEMP_IMAGE_SIZE="1M"    # dd's bs parameter
 TEMP_IMAGE_COUNT=1    # dd's count parameter
 TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router
+FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation
+ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
 GADGET_ID="usbnet"    # gadget ID used in "/sys/kernel/config/usb_gadget/ID"
 GADGET_PRODUCT="$(tr -d '\0' < /sys/firmware/devicetree/base/model | sed "s/^\(.*\) Rev.*$/\1/") USB Gadget"    # product name, "Raspberry Pi Zero W USB Gadget"
 GADGET_MANUFACTURER="Raspberry Pi Foundation"    # product manufacturer
@@ -108,11 +110,11 @@ gadget_up() {
 		;;
 		"mass_storage")
 			mkdir "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE"
-		
+
 			[ -n "$GADGET_STORAGE_STALL" ] && echo "$GADGET_STORAGE_STALL" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/stall"
 
 			[ ! -d "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.0" ] && mkdir "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.0"
-			
+
 			if [ -n "$GADGET_STORAGE_FILE" ] && [ -f "$GADGET_STORAGE_FILE" ]; then
 				[ ! -f "$GADGET_STORAGE_FILE" ] && { echo "Image file does not exist: $GADGET_STORAGE_FILE"; exit 2; }
 
@@ -156,15 +158,15 @@ gadget_down() {
 
 			[ -d "/sys/class/net/$INTERFACE" ] && ifconfig "$INTERFACE" down
 		fi
-		
+
 		find $CONFIGFS_DEVICE_PATH/configs/*/* -maxdepth 0 -type l -exec rm {} \; 2> /dev/null || true
 		find $CONFIGFS_DEVICE_PATH/configs/*/strings/* -maxdepth 0 -type d -exec rmdir {} \; 2> /dev/null || true
 		find $CONFIGFS_DEVICE_PATH/os_desc/* -maxdepth 0 -type l -exec rm {} \; 2> /dev/null || true
 		find $CONFIGFS_DEVICE_PATH/functions/* -maxdepth 0 -type d -exec rmdir {} \; 2> /dev/null || true
 		find $CONFIGFS_DEVICE_PATH/strings/* -maxdepth 0 -type d -exec rmdir {} \; 2> /dev/null || true
 		find $CONFIGFS_DEVICE_PATH/configs/* -maxdepth 0 -type d -exec rmdir {} \; 2> /dev/null || true
-		
-		rmdir "$CONFIGFS_DEVICE_PATH"
+
+		rmdir "$CONFIGFS_DEVICE_PATH" 2> /dev/null
 	fi
 }
 
@@ -183,7 +185,7 @@ generate_mac_addresses() {
 			echo "Invalid value for \"GADGET_MAC_VENDOR\" variable!"
 			exit 22
 		fi
-		
+
 		GADGET_MAC_HOST="$(echo "$GADGET_MAC_VENDOR" | awk '{print tolower($0)}'):$(echo "$GADGET_SERIAL_LOWER" | sed 's/\(\w\w\)/:\1/g' | cut -b 11-)"
 	fi
 
@@ -212,9 +214,55 @@ create_image() {
 	command -v "mkfs.$FILESYSTEM" >/dev/null 2>&1 || { echo "Function \"mkfs.$FILESYSTEM\" not found"; exit 22; }
 
 	echo "Creating image file \"$FILE\" ($FILESYSTEM, $COUNT*$SIZE)..."
-	
+
 	{ DD_OUTPUT=$(dd if=/dev/zero of="$FILE" bs="$SIZE" count="$COUNT" 2>&1); } || { echo "$DD_OUTPUT"; exit 1; }
 	{ MKFS_OUTPUT=$("mkfs.$FILESYSTEM" "$FILE" 2>&1); } || { echo "$MKFS_OUTPUT"; exit 1; }
+
+	if [ "$FAKE_ASUS_OPTWARE" = true ]; then
+		echo "Creating fake Asus Optware installation..."
+
+		mkdir "${FILE}-mnt"
+		mount "$FILE" "${FILE}-mnt"
+		mkdir -p "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/etc/init.d" "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/lib/ipkg/lists" "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/lib/ipkg/info"
+
+		echo "dest /opt/ /" > "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/etc/ipkg.conf"
+		touch "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/.asusrouter"
+
+		cat <<EOT >> "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+#!/bin/sh
+[ "\$1" == "start" ] && eval "\$(nvram get script_usbmount)"
+[ "\$1" == "stop" ] && eval "\$(nvram get script_usbumount)"
+EOT
+
+		cat <<EOT >> "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/lib/ipkg/status"
+Package: asuswrt-usb-network
+Version: 1.0.0.0
+Status: install user installed
+Architecture: $ASUS_OPTWARE_ARCH
+Installed-Time: 0
+EOT
+
+		cat <<EOT >> "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/lib/ipkg/lists/optware.asus"
+Package: asuswrt-usb-network
+Version: 1.0.0.0
+Architecture: $ASUS_OPTWARE_ARCH
+EOT
+
+		cat <<EOT >> "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/lib/ipkg/info/asuswrt-usb-network.control"
+Package: asuswrt-usb-network
+Architecture: $ASUS_OPTWARE_ARCH
+Priority: optional
+Section: libs
+Version: 1.0.0.0
+Depends:
+Suggests:
+Conflicts:
+Enabled: yes
+Installed-Size: 1
+EOT
+
+		umount "${FILE}-mnt" && rmdir "${FILE}-mnt" 2> /dev/null
+	fi
 }
 
 interrupt() {
@@ -271,7 +319,7 @@ case "$1" in
 
 		if [ "$VERIFY_CONNECTION" = true ]; then
 			echo "Checking if router is reachable (timeout: ${VERIFY_TIMEOUT}s)..."
-			
+
 			_TIMER=0
 			_TIMEOUT=$VERIFY_TIMEOUT
 			while [ "$_TIMER" -lt "$_TIMEOUT" ]; do
