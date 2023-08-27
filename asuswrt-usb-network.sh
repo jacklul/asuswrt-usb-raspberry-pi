@@ -14,6 +14,7 @@
 NETWORK_FUNCTION="ecm"    # network function to use, supported: ecm (recommended), rndis, eem, ncm
 VERIFY_CONNECTION=true    # verify that we can reach gateway after enabling network gadget
 SKIP_MASS_STORAGE=false    # skip adding mass storage gadget, setup network gadget right away
+COMBINE_GADGETS=false    # launch both mass storage and network gadgets at the same time, not every router will support this
 VERIFY_TIMEOUT=60    # maximum seconds to wait for the connection check
 VERIFY_SLEEP=1    # time to sleep between each gateway ping
 WAIT_TIMEOUT=60    # maximum seconds to wait for the router to write to the storage image file
@@ -58,10 +59,8 @@ require_root() {
 	[ "$UID" -eq 0 ] || { echo "This script must run as root!"; exit 1; }
 }
 
-gadget_up() {
-	local FUNCTION="$(echo "$1" | awk '{print tolower($0)}')"
-	local CONFIG="c.1"
-	local INSTANCE="0"
+init_gadget() {
+	local CONFIG="$1"
 
 	if [ -d "$CONFIGFS_DEVICE_PATH" ]; then
 		[ -n "$(cat "$CONFIGFS_DEVICE_PATH/UDC")" ] && { echo "Gadget \"$GADGET_ID\" is already up"; exit 16; }
@@ -71,8 +70,6 @@ gadget_up() {
 	fi
 
 	modprobe libcomposite
-
-	echo "Setting up gadget \"$GADGET_ID\" with function \"$FUNCTION\"..."
 
 	mkdir "$CONFIGFS_DEVICE_PATH"
 
@@ -94,6 +91,16 @@ gadget_up() {
 	echo "$GADGET_ATTRIBUTES" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/bmAttributes"
 	echo "$GADGET_MAX_POWER" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/MaxPower"
 	mkdir "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409"
+}
+
+add_function() {
+	local FUNCTION="$(echo "$1" | awk '{print tolower($0)}')"
+	local CONFIG="c.1"
+	local INSTANCE="0"
+
+	if [ ! -d "$CONFIGFS_DEVICE_PATH/functions" ]; then
+		init_gadget "$CONFIG"
+	fi
 
 	case "$FUNCTION" in
 		"ecm"|"rndis"|"eem"|"ncm")
@@ -130,12 +137,16 @@ gadget_up() {
 			exit 22
 		;;
 	esac
+}
 
+gadget_up() {
 	udevadm settle -t 5 || :
 	ls /sys/class/udc > "$CONFIGFS_DEVICE_PATH/UDC"
 
-	if [ -f "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE/ifname" ]; then
-		local INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE/ifname")"
+	local INSTANCE_NET=$(find $CONFIGFS_DEVICE_PATH/functions/ -maxdepth 2 -name "ifname" | grep -o '/*[^.]*/$' || echo "")
+	
+	if [ -n "$INSTANCE_NET" ] && [ -f "$CONFIGFS_DEVICE_PATH/functions/$INSTANCE_NET/ifname" ]; then
+		local INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$INSTANCE_NET/ifname")"
 
 		ifconfig "$INTERFACE" up
 	fi
@@ -285,8 +296,18 @@ case "$1" in
 		[ -d "$CONFIGFS_DEVICE_PATH" ] && gadget_down
 
 		if [ "$SKIP_MASS_STORAGE" = false ]; then
+			if [ "$COMBINE_GADGETS" = true ]; then
+				echo "Setting up gadget \"$GADGET_ID\" with combined functions (mass_storage and $NETWORK_FUNCTION)..."
+				
+				add_function "$NETWORK_FUNCTION"
+			else
+				echo "Setting up gadget \"$GADGET_ID\" with function \"mass_storage\"..."
+			fi
+
 			create_image "$GADGET_STORAGE_FILE" "$TEMP_IMAGE_FS" "$TEMP_IMAGE_SIZE" "$TEMP_IMAGE_COUNT"
-			gadget_up "mass_storage"
+
+			add_function "mass_storage"
+			gadget_up
 
 			MS_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 1 -name "mass_storage.*" | grep -o '[^.]*$' || echo "")
 			LUN_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions/mass_storage.$MS_INSTANCE" -maxdepth 1 -name "lun.*" | grep -o '[^.]*$' || echo "")
@@ -304,11 +325,18 @@ case "$1" in
 
 			[ "$_TIMER" -ge "$_TIMEOUT" ] && echo "Timeout reached, continuing anyway..."
 
-			gadget_down
-			rm -f "$GADGET_STORAGE_FILE"
+			if [ "$COMBINE_GADGETS" = false ]; then
+				gadget_down
+				rm -f "$GADGET_STORAGE_FILE"
+			fi
 		fi
 
-		gadget_up "$NETWORK_FUNCTION"
+		if [ "$COMBINE_GADGETS" = false ] || [ "$SKIP_MASS_STORAGE" = true ]; then
+			echo "Setting up gadget \"$GADGET_ID\" with function \"$NETWORK_FUNCTION\"..."
+
+			add_function "$NETWORK_FUNCTION"
+			gadget_up
+		fi
 
 		NET_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 1 -name "$NETWORK_FUNCTION.*" | grep -o '[^.]*$' || echo "")
 		NET_INTERFACE=$(cat "/sys/kernel/config/usb_gadget/$GADGET_ID/functions/$NETWORK_FUNCTION.$NET_INSTANCE/ifname")
