@@ -16,18 +16,20 @@ COMMENT_LINE="# asuswrt-usb-raspberry-pi #"
 
 if [ "$MERLIN" = "0" ]; then
     MODIFICATION="        $COMMENT_LINE
-        MOUNTED_PATHS=\"\$(df | grep /dev/sd | awk '{print \$NF}')\"
+        {
+            MOUNTED_PATHS=\"\$(df | grep /dev/sd | awk '{print \$NF}')\"
 
-        if [ -n \"\$MOUNTED_PATHS\" ]; then
-            for MOUNTED_PATH in \$MOUNTED_PATHS; do
-                touch \"\$MOUNTED_PATH/txt\"
-            done
-        else
-            logger -s -t \"\$SCRIPT_NAME\" \"Could not find storage mount point\"
-        fi
+            if [ -n \"\$MOUNTED_PATHS\" ]; then
+                for MOUNTED_PATH in \$MOUNTED_PATHS; do
+                    touch \"\$MOUNTED_PATH/txt\"
+                done
+            else
+                logger -s -t \"\$SCRIPT_NAME\" \"Could not find storage mount point\"
+            fi
 
-        sync
-        ejusb -1 0
+            sync
+            ejusb -1 0
+        } &
         $COMMENT_LINE
 "
 
