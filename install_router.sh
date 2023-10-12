@@ -21,15 +21,22 @@ if [ "$MERLIN" = "0" ]; then
 
             if [ -n \"\$MOUNTED_PATHS\" ]; then
                 for MOUNTED_PATH in \$MOUNTED_PATHS; do
-                    touch \"\$MOUNTED_PATH/txt\"
+                    touch \"\$MOUNTED_PATH/asuswrt-usb-network\"
+                done
+
+                sync
+                ejusb -1 0
+                
+                for MOUNTED_PATH in \$MOUNTED_PATHS; do
+                    if [ -d \"\$MOUNTED_PATH\" ]; then
+                        umount -f \"\$MOUNTED_PATH\" && rmdir \"\$MOUNTED_PATH\"
+                        [ -d \"\$MOUNTED_PATH\" ] && logger -s -t \"\$SCRIPT_TAG\" \"Failed to unmount \$MOUNTED_PATH\"
+                    fi
                 done
             else
-                logger -s -t \"\$SCRIPT_NAME\" \"Could not find storage mount point\"
+                logger -s -t \"\$SCRIPT_TAG\" \"Could not find storage mount point\"
             fi
-
-            sync
-            ejusb -1 0
-        } &
+        } > /dev/null 2>&1 &
         $COMMENT_LINE
 "
 

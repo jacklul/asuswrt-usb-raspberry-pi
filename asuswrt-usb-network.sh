@@ -22,6 +22,7 @@ WAIT_SLEEP=1    # time to sleep between each image contents checks
 TEMP_IMAGE_SIZE="1M"    # dd's bs parameter
 TEMP_IMAGE_COUNT=1    # dd's count parameter
 TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router
+FORCE_EJECT=false    # forces mass storage image to be ejected before taking down gadget
 FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation
 ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
 GADGET_ID="usbnet"    # gadget ID used in "/sys/kernel/config/usb_gadget/ID"
@@ -43,6 +44,7 @@ GADGET_MAC_HOST=""    # host MAC address, if empty - MAC address is generated fr
 GADGET_MAC_DEVICE=""    # device MAC address, if empty - MAC address is generated from CPU serial with 02: prefix
 GADGET_STORAGE_FILE="/tmp/$GADGET_ID.img"    # path to the temporary image file that will be created and mounted
 GADGET_STORAGE_STALL=""    # change value of stall option, empty means default
+GADGET_STORAGE_REMOVABLE=""    # change value of removable option, empty means default
 
 readonly CONFIG_FILE="/etc/asuswrt-usb-network.conf"
 if [ -f "$CONFIG_FILE" ]; then
@@ -126,6 +128,7 @@ add_function() {
 				[ ! -f "$GADGET_STORAGE_FILE" ] && { echo "Image file does not exist: $GADGET_STORAGE_FILE"; exit 2; }
 
 				echo "$GADGET_STORAGE_FILE" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.0/file"
+				[ -n "$GADGET_STORAGE_REMOVABLE" ] && echo "$GADGET_STORAGE_REMOVABLE" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.0/removable"
 			fi
 
 			echo "Mass Storage" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration"
@@ -206,11 +209,22 @@ generate_mac_addresses() {
 	fi
 }
 
+forced_eject() {
+	local MS_INSTANCE="$1"
+	local LUN_INSTANCE="$2"
+
+	if [ -d "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$MS_INSTANCE/lun.$LUN_INSTANCE" ]; then
+		echo "Ejecting mass storage image..."
+		echo "1" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$MS_INSTANCE/lun.$LUN_INSTANCE/forced_eject"
+		sleep 5
+	fi
+}
+
 is_started() {
 	if [ -d "$CONFIGFS_DEVICE_PATH" ]; then
-		local NET_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 2 -name "ifname" || echo "")
+		local INSTANCE_NET=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 2 -name "ifname" || echo "")
 
-		[ -n "$NET_INSTANCE" ] && return 0
+		[ -n "$INSTANCE_NET" ] && return 0
 	fi
 
 	return 1
@@ -241,8 +255,12 @@ create_image() {
 
 		cat <<EOT >> "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 #!/bin/sh
-[ "\$1" == "start" ] && eval "\$(nvram get script_usbmount)"
-[ "\$1" == "stop" ] && eval "\$(nvram get script_usbumount)"
+if [ "\$1" == "start" ]; then
+	nvram set apps_state_autorun=4
+	eval "\$(nvram get script_usbmount)"
+elif [ "\$1" == "stop" ]; then
+	eval "\$(nvram get script_usbumount)"
+fi
 EOT
 
 		cat <<EOT >> "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH/lib/ipkg/status"
@@ -323,7 +341,7 @@ case "$1" in
 
 			_TIMER=0
 			_TIMEOUT=$WAIT_TIMEOUT
-			while ! debugfs -R "ls -l ." "$GADGET_STORAGE_FILE" 2>/dev/null | grep -q txt && [ "$_TIMER" -lt "$_TIMEOUT" ]; do
+			while ! debugfs -R "ls -l ." "$GADGET_STORAGE_FILE" 2>/dev/null | grep -q "asuswrt-usb-network" && [ "$_TIMER" -lt "$_TIMEOUT" ]; do
 				_TIMER=$((_TIMER+WAIT_SLEEP))
 				sleep $WAIT_SLEEP
 			done
@@ -331,6 +349,7 @@ case "$1" in
 			[ "$_TIMER" -ge "$_TIMEOUT" ] && echo "Timeout reached, continuing anyway..."
 
 			if [ "$COMBINE_GADGETS" = false ]; then
+				[ "$FORCE_EJECT" = true ] && forced_eject "$MS_INSTANCE" "$LUN_INSTANCE"
 				gadget_down
 				rm -f "$GADGET_STORAGE_FILE"
 			fi
