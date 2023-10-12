@@ -7,7 +7,7 @@ Great way to run [Pi-hole](https://pi-hole.net) in your network on a budget Rasp
 
 **Warning: This cannot be used together with Entware/Optware/Asus Download Master on stock firmware.**
 
-Everything here was tested on **RT-AX58U v2** on official **388.2** firmware.
+Everything here was tested on **RT-AX58U v2** on official firmware available at the time.
 
 ## How it works
 
