@@ -272,6 +272,11 @@ Enabled: yes
 Installed-Size: 1
 EOT
 
+		# per src/router/rc/init.c mipsel does not use postfix
+		if [ "$(echo "$ASUS_OPTWARE_ARCH" | awk '{print tolower($0)}')" = "mipsel" ]; then
+			mv "${FILE}-mnt/asusware.$ASUS_OPTWARE_ARCH" "${FILE}-mnt/asusware"
+		fi
+
 		umount "${FILE}-mnt" && rmdir "${FILE}-mnt" 2> /dev/null
 	fi
 }
