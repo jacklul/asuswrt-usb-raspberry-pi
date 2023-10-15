@@ -21,15 +21,25 @@ if [ "$MERLIN" = "0" ]; then
 
             if [ -n \"\$MOUNTED_PATHS\" ]; then
                 for MOUNTED_PATH in \$MOUNTED_PATHS; do
+                    logger -s -t \"\$SCRIPT_TAG\" \"Waiting for mount \$MOUNTED_PATH to be idle...\"
+
+                    TIMER=0
+                    while [ -n \"\$(lsof | grep \"\$MOUNTED_PATH\")\" ] && [ \"\$TIMER\" -lt \"60\" ] ; do
+                        TIMER=\$((TIMER+1))
+                        sleep 1
+                    done
+
+                    logger -s -t \"\$SCRIPT_TAG\" \"Writing mark to mount \$MOUNTED_PATH...\"
                     touch \"\$MOUNTED_PATH/asuswrt-usb-network\"
                 done
 
-                sync
+                logger -s -t \"\$SCRIPT_TAG\" \"Ejecting storage device...\"
                 ejusb -1 0
                 
                 for MOUNTED_PATH in \$MOUNTED_PATHS; do
                     if [ -d \"\$MOUNTED_PATH\" ]; then
-                        umount -f \"\$MOUNTED_PATH\" && rmdir \"\$MOUNTED_PATH\"
+                        umount -f \"\$MOUNTED_PATH\"
+                        rmdir \"\$MOUNTED_PATH\"
                         [ -d \"\$MOUNTED_PATH\" ] && logger -s -t \"\$SCRIPT_TAG\" \"Failed to unmount \$MOUNTED_PATH\"
                     fi
                 done

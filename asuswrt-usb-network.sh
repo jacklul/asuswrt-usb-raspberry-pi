@@ -337,7 +337,7 @@ case "$1" in
 
 			{ [ -z "$MS_INSTANCE" ] || [ -z "$LUN_INSTANCE" ]; } && { echo "Could not find function or LUN instance"; exit 2; }
 
-			echo "Waiting for the router to write to the image (timeout: ${WAIT_TIMEOUT}s)...."
+			echo "Waiting for the router to write mark to the image (timeout: ${WAIT_TIMEOUT}s)...."
 
 			_TIMER=0
 			_TIMEOUT=$WAIT_TIMEOUT
