@@ -9,7 +9,7 @@ set -e
 
 echo "Downloading required scripts..."
 
-[ "$MERLIN" = "0" ] && [ ! -f "/tmp/startup.sh" ] && curl -sf "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/startup.sh" -o "/tmp/startup.sh"
+[ "$MERLIN" = "0" ] && [ ! -f "/tmp/scripts-startup.sh" ] && curl -sf "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts-startup.sh" -o "/tmp/scripts-startup.sh"
 [ ! -f "/tmp/usb-network.sh" ] && curl -sf "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/usb-network.sh" -o "/tmp/usb-network.sh"
 
 COMMENT_LINE="# asuswrt-usb-raspberry-pi #"
@@ -40,23 +40,23 @@ if [ "$MERLIN" = "0" ]; then
         $COMMENT_LINE
 "
 
-    echo "Modifying startup script..."
+    echo "Modifying scripts-startup script..."
 
-    if ! grep -q "$COMMENT_LINE" "/tmp/startup.sh"; then
-        LINE="$(grep -Fn "f \"\$CHECK_FILE\" ]; then" "/tmp/startup.sh")"
+    if ! grep -q "$COMMENT_LINE" "/tmp/scripts-startup.sh"; then
+        LINE="$(grep -Fn "f \"\$CHECK_FILE\" ]; then" "/tmp/scripts-startup.sh")"
 
-        [ -z "$LINE" ] && { echo "Failed to modify /tmp/startup.sh - unable to find correct line"; exit 1; }
+        [ -z "$LINE" ] && { echo "Failed to modify /tmp/scripts-startup.sh - unable to find correct line"; exit 1; }
 
         LINE="$(echo "$LINE" | cut -d":" -f1)"
         LINE=$((LINE-1))
-        MD5="$(md5sum "/tmp/startup.sh")"
+        MD5="$(md5sum "/tmp/scripts-startup.sh")"
 
         #shellcheck disable=SC2005
-        echo "$({ head -n $((LINE)) /tmp/startup.sh; echo "$MODIFICATION"; tail -n +$((LINE+1)) /tmp/startup.sh; })" > /tmp/startup.sh
+        echo "$({ head -n $((LINE)) /tmp/scripts-startup.sh; echo "$MODIFICATION"; tail -n +$((LINE+1)) /tmp/scripts-startup.sh; })" > /tmp/scripts-startup.sh
 
-        [ "$MD5" = "$(md5sum "/tmp/startup.sh")" ] && { echo "Failed to modify /tmp/startup.sh - modification failed"; exit 1; }
+        [ "$MD5" = "$(md5sum "/tmp/scripts-startup.sh")" ] && { echo "Failed to modify /tmp/scripts-startup.sh - modification failed"; exit 1; }
     else
-        echo "Seems like /tmp/startup.sh is already modified"
+        echo "Seems like /tmp/scripts-startup.sh is already modified"
     fi
 else
     [ ! -d /jffs/scripts ] && mkdir /jffs/scripts
@@ -97,18 +97,18 @@ fi
 
 echo "Setting permissions..."
 
-chmod +x "/tmp/startup.sh" "/tmp/usb-network.sh"
+chmod +x "/tmp/scripts-startup.sh" "/tmp/usb-network.sh"
 
 echo "Moving files..."
 
-mv -v "/tmp/startup.sh" "/jffs/startup.sh"
+mv -v "/tmp/scripts-startup.sh" "/jffs/scripts-startup.sh"
 mkdir -vp "/jffs/scripts"
 mv -v "/tmp/usb-network.sh" "/jffs/scripts/usb-network.sh"
 
 if [ "$MERLIN" = "0" ]; then
-    echo "Running "startup.sh install"..."
+    echo "Running "scripts-startup.sh install"..."
 
-    /jffs/startup.sh install
+    /jffs/scripts-startup.sh install
 fi
 
 echo "Finished"
