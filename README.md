@@ -5,7 +5,7 @@ This makes any Raspberry Pi capable of becoming USB Gadget to connect to LAN net
 
 Great way to run [Pi-hole](https://pi-hole.net) in your network on a budget Raspberry Pi Zero!
 
-**Warning: This cannot be used together with Entware/Optware/Asus Download Master on stock firmware.**
+**Warning: This cannot be used together with Optware / Asus Download Master on stock firmware.**
 
 Everything here was tested on **RT-AX58U v2** on official firmware available at the time.
 
@@ -99,3 +99,30 @@ The `Host MAC` is the value you want to use.
 
 You can add IPs or IP ranges to `PERMIT_IP` variable to prevent that IPs from having their DNS server forced.
 Use `FALLBACK_DNS_SERVER` in case the Pi disconnects from the router, it can also be set to the router's IP address.
+
+## Running Entware
+
+Create an image that will serve as storage:
+```bash
+sudo dd if=/dev/zero of=/mass_storage.img bs=1M count=1024
+sudo mkfs.ext2 /mass_storage.img
+```
+
+Modify the configuration in `/etc/asuswrt-usb-network.conf`:
+```
+GADGET_STORAGE_FILE="/mass_storage.img"
+```
+
+Then you will need to install few scripts from [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts) on the router:
+```bash
+curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/hotplug-event.sh" -o /jffs/scripts/hotplug-event.sh
+curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/usb-mount.sh" -o /jffs/scripts/usb-mount.sh
+curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/entware.sh" -o /jffs/scripts/entware.sh
+chmod +x /jffs/scripts/hotplug-event.sh /jffs/scripts/usb-mount.sh /jffs/scripts/entware.sh
+/jffs/scripts/hotplug-event.sh start
+```
+
+Reboot the Pi, wait for the storage to be mounted by `usb-mount.sh` script then install Entware by using this command:
+```bash
+/jffs/scripts/entware.sh install
+```
