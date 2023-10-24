@@ -11,21 +11,20 @@
 # shellcheck disable=2155,1090
 
 # Configuration variables
-NETWORK_FUNCTION="ecm"    # network function to use, supported: ecm (recommended), rndis, eem, ncm
+NETWORK_FUNCTION="ecm"    # network gadget function to use, supported are: rndis, ecm (recommended), eem, ncm
 VERIFY_CONNECTION=true    # verify that we can reach gateway after enabling network gadget? (recommended if using services depending on network-online.target)
 SKIP_MASS_STORAGE=false    # skip adding initial mass storage gadget - instead setup network gadget right away? (useful only on Merlin firmware)
+FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation? (requires SKIP_MASS_STORAGE=false)
+FAKE_ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
 TEMP_IMAGE_FILE="/tmp/asuswrt-usb-network.img"    # temporary image file that will be created
 TEMP_IMAGE_SIZE="1M"    # dd's bs parameter, might need to be increased in case router doesn't want to mount the storage
 TEMP_IMAGE_COUNT=1    # dd's count parameter, might need to be increased in case router doesn't want to mount the storage
-TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router
+TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router, ext2 is fine
 TEMP_IMAGE_DELETE=true    # delete temporary image after it is no longer useful?
-FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation? (requires SKIP_MASS_STORAGE=false)
-FAKE_ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
-CHECK_STORAGE_FILE=true    # whenever to run e2fsck (check and repair) on image file provided in GADGET_STORAGE_FILE on each mount
+WAIT_TIMEOUT=90    # maximum seconds to wait for the router to write to the storage image file, in seconds
+WAIT_SLEEP=1    # time to sleep between each image contents checks, in seconds
 VERIFY_TIMEOUT=60    # maximum seconds to wait for the connection check, in seconds
 VERIFY_SLEEP=1    # time to sleep between each gateway ping, in seconds
-WAIT_TIMEOUT=60    # maximum seconds to wait for the router to write to the storage image file, in seconds
-WAIT_SLEEP=1    # time to sleep between each image contents checks, in seconds
 GADGET_ID="usbnet"    # gadget ID used in "/sys/kernel/config/usb_gadget/ID"
 GADGET_PRODUCT="$(tr -d '\0' < /sys/firmware/devicetree/base/model | sed "s/^\(.*\) Rev.*$/\1/") USB Gadget"    # product name, "Raspberry Pi Zero W USB Gadget"
 GADGET_MANUFACTURER="Raspberry Pi Foundation"    # product manufacturer
@@ -44,11 +43,13 @@ GADGET_MAC_VENDOR="B8:27:EB"    # vendor MAC prefix to use in generated MAC addr
 GADGET_MAC_HOST=""    # host MAC address, if empty - MAC address is generated from GADGET_MAC_VENDOR and CPU serial
 GADGET_MAC_DEVICE=""    # device MAC address, if empty - MAC address is generated from CPU serial with 02: prefix
 GADGET_STORAGE_FILE=""    # path to the image file that will be mounted as mass storage, if set will add mass storage function together with network function
+GADGET_STORAGE_FILE_CHECK=true    # whenever to run e2fsck (check and repair) on image file with each mount
 GADGET_STORAGE_STALL=""    # change value of stall option, empty means system default
 GADGET_STORAGE_REMOVABLE=""    # change value of removable option, empty means system default
 GADGET_STORAGE_CDROM=""    # change value of cdrom option, empty means system default
 GADGET_STORAGE_RO=""    # change value of ro option, empty means system default
 GADGET_STORAGE_NOFUA=""    # change value of nofua option, empty means system default
+GADGET_SCRIPT=""    # run custom script just before gadget creation, must be a valid path to executable script file, receives argument with config path
 
 readonly CONFIG_FILE="/etc/asuswrt-usb-network.conf"
 if [ -f "$CONFIG_FILE" ]; then
@@ -268,24 +269,28 @@ create_fake_asus_optware() {
     echo "dest /opt/ /" > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/ipkg.conf"
     touch "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/.asusrouter"
 
+    # list of state vars taken from src/router/rc/services.c
+    # we reset some apps_ vars to not end up with random bugs (web UI persistently trying to install apps in a loop)
     cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 #!/bin/sh
-if [ "\$1" == "start" ]; then
-    nvram set apps_mounted_path=
-    nvram set apps_state_action=
+
+if [ "\$1" = "start" ]; then
+    SCRIPT="\$(nvram get script_usbmount)"
+    [ -n "\$SCRIPT" ] && eval "\$SCRIPT" || true
+
     nvram set apps_state_autorun=
-    nvram set apps_state_cancel=
-    nvram set apps_state_enable=
-    nvram set apps_state_error=
     nvram set apps_state_install=
     nvram set apps_state_remove=
-    nvram set apps_state_stop=
     nvram set apps_state_switch=
+    nvram set apps_state_stop=
+    nvram set apps_state_enable=
     nvram set apps_state_update=
     nvram set apps_state_upgrade=
-    eval "\$(nvram get script_usbmount)"
-elif [ "\$1" == "stop" ]; then
-    eval "\$(nvram get script_usbumount)"
+    nvram set apps_state_cancel=
+    nvram set apps_state_error=
+    nvram set apps_state_action=
+    nvram set apps_mounted_path=
+    nvram set apps_dev=
 fi
 EOT
 
@@ -316,7 +321,7 @@ Enabled: yes
 Installed-Size: 1
 EOT
 
-    # per src/router/rc/init.c mipsel does not use postfix
+    # per src/router/rc/init.c and src/router/rom/apps_scripts/ mipsel does not use a postfix
     if [ "$(echo "$FAKE_ASUS_OPTWARE_ARCH" | awk '{print tolower($0)}')" = "mipsel" ]; then
         mv "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH" "$DESTINATION_PATH/asusware"
     fi
@@ -328,7 +333,7 @@ check_filesystem_in_image() {
     [ ! -f "$IMAGE" ] && { echo "Image file does not exist"; exit 2; }
 
     if ! fdisk -l "$IMAGE" | grep -q "Device" | grep -q "Blocks" | grep -q "Boot"; then
-        # occasionally e2fsck will exit with fail code, we need to ignore it to continue
+        # occasionally e2fsck will exit with a fail code, we need to ignore it to continue
         e2fsck -pf "$IMAGE" || true
     else
         echo "Skipping filesystem check because the image file contains partition table"
@@ -388,7 +393,7 @@ case "$1" in
         if [ -z "$GADGET_STORAGE_FILE" ]; then
             echo "Setting up gadget \"$GADGET_ID\" with function \"$NETWORK_FUNCTION\"..."
         else
-            if [ -n "$GADGET_STORAGE_FILE" ] && [ -f "$GADGET_STORAGE_FILE" ] && [ "$CHECK_STORAGE_FILE" = true ]; then
+            if [ -n "$GADGET_STORAGE_FILE" ] && [ -f "$GADGET_STORAGE_FILE" ] && [ "$GADGET_STORAGE_FILE_CHECK" = true ]; then
                 echo "Checking filesystem in storage file \"$GADGET_STORAGE_FILE\"..."
                 check_filesystem_in_image "$GADGET_STORAGE_FILE"
             fi
@@ -404,6 +409,10 @@ case "$1" in
             else
                 echo "Image file \"$GADGET_STORAGE_FILE\" does not exist, skipping adding mass storage function..."
             fi
+        fi
+
+        if [ -n "$GADGET_SCRIPT" ] && [ -x "$GADGET_SCRIPT" ]; then
+            $GADGET_SCRIPT "$CONFIGFS_DEVICE_PATH"
         fi
 
         gadget_up
@@ -429,7 +438,7 @@ case "$1" in
                 sleep $VERIFY_SLEEP
             done
 
-            [ "$_TIMER" -ge "$_TIMEOUT" ] && { echo "Completed but couldn't determine network status (timeout reached)"; exit 124; }
+            [ "$_TIMER" -ge "$_TIMEOUT" ] && { echo "Completed but couldn't determine network status (timeout reached)"; exit; }
         fi
 
         echo "Completed successfully"

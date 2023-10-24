@@ -6,7 +6,7 @@ command -v debugfs >/dev/null 2>&1 || { echo "This script requires 'debugfs' com
 
 SPATH=$(dirname "$0")
 REQUIRED_FILES=( asuswrt-usb-network.sh asuswrt-usb-network.service )
-DOWNLOAD_PATH=asuswrt-usb-network
+DOWNLOAD_PATH=/tmp/asuswrt-usb-network
 DOWNLOAD_URL=https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master
 
 set -e
