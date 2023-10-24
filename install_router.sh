@@ -21,6 +21,8 @@ if [ "$MERLIN" = "0" ]; then
 
             if [ -n \"\$MOUNTED_PATHS\" ]; then
                 for MOUNTED_PATH in \$MOUNTED_PATHS; do
+                    [ ! -d \"\$MOUNTED_PATH/asuswrt-usb-network\" ] && continue
+                    
                     logger -s -t \"\$SCRIPT_TAG\" \"Waiting for mount \$MOUNTED_PATH to be idle...\"
 
                     TIMER=0
@@ -30,18 +32,16 @@ if [ "$MERLIN" = "0" ]; then
                     done
 
                     logger -s -t \"\$SCRIPT_TAG\" \"Writing mark to mount \$MOUNTED_PATH...\"
-                    touch \"\$MOUNTED_PATH/asuswrt-usb-network\"
-                done
-
-                logger -s -t \"\$SCRIPT_TAG\" \"Ejecting storage device...\"
-                ejusb -1 0
-                
-                for MOUNTED_PATH in \$MOUNTED_PATHS; do
-                    if [ -d \"\$MOUNTED_PATH\" ]; then
-                        umount -f \"\$MOUNTED_PATH\"
-                        rmdir \"\$MOUNTED_PATH\"
-                        [ -d \"\$MOUNTED_PATH\" ] && logger -s -t \"\$SCRIPT_TAG\" \"Failed to unmount \$MOUNTED_PATH\"
+                    touch \"\$MOUNTED_PATH/asuswrt-usb-network-mark\" && sync
+                    
+                    if umount \"\$MOUNTED_PATH\"; then
+                        rm -rf \"\$MOUNTED_PATH\"
+                        logger -s -t \"\$SCRIPT_TAG\" \"Unmounted \$MOUNTED_PATH...\"
+                    else
+                        logger -s -t \"\$SCRIPT_TAG\" \"Failed to unmount \$MOUNTED_PATH\"
                     fi
+
+                    break
                 done
             else
                 logger -s -t \"\$SCRIPT_TAG\" \"Could not find storage mount point\"

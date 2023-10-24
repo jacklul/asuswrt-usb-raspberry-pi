@@ -21,6 +21,7 @@ TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." comman
 TEMP_IMAGE_DELETE=true    # delete temporary image after it is no longer useful?
 FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation? (requires SKIP_MASS_STORAGE=false)
 FAKE_ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
+CHECK_STORAGE_FILE=true    # whenever to run e2fsck (check and repair) on image file provided in GADGET_STORAGE_FILE on each mount
 VERIFY_TIMEOUT=60    # maximum seconds to wait for the connection check, in seconds
 VERIFY_SLEEP=1    # time to sleep between each gateway ping, in seconds
 WAIT_TIMEOUT=60    # maximum seconds to wait for the router to write to the storage image file, in seconds
@@ -242,34 +243,53 @@ create_image() {
     { DD_OUTPUT=$(dd if=/dev/zero of="$FILE" bs="$SIZE" count="$COUNT" 2>&1); } || { echo "$DD_OUTPUT"; exit 1; }
     { MKFS_OUTPUT=$("mkfs.$FILESYSTEM" "$FILE" 2>&1); } || { echo "$MKFS_OUTPUT"; exit 1; }
 
+    mkdir -p "$FILE-mnt"
+    mount "$FILE" "$FILE-mnt"
+
+    mkdir "$FILE-mnt/asuswrt-usb-network"
+
     if [ "$FAKE_ASUS_OPTWARE" = true ]; then
-        create_fake_asus_optware "$FILE"
+        create_fake_asus_optware "$FILE-mnt"
     fi
+
+    umount "$FILE-mnt"
+    rmdir "$FILE-mnt"
 }
 
 create_fake_asus_optware() {
     local DESTINATION_PATH="$1"
 
+    [ ! -d "$DESTINATION_PATH" ] && { echo "Destination path does not exist"; exit 2; }
+
     echo "Creating fake Asus Optware installation..."
 
-    mkdir "$DESTINATION_PATH-mnt"
-    mount "$DESTINATION_PATH" "$DESTINATION_PATH-mnt"
-    mkdir -p "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d" "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/lists" "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/info"
+    mkdir -p "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d" "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/lists" "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/info"
 
-    echo "dest /opt/ /" > "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/ipkg.conf"
-    touch "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/.asusrouter"
+    echo "dest /opt/ /" > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/ipkg.conf"
+    touch "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/.asusrouter"
 
-    cat <<EOT >> "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 #!/bin/sh
 if [ "\$1" == "start" ]; then
-    nvram set apps_state_autorun=4
+    nvram set apps_mounted_path=
+    nvram set apps_state_action=
+    nvram set apps_state_autorun=
+    nvram set apps_state_cancel=
+    nvram set apps_state_enable=
+    nvram set apps_state_error=
+    nvram set apps_state_install=
+    nvram set apps_state_remove=
+    nvram set apps_state_stop=
+    nvram set apps_state_switch=
+    nvram set apps_state_update=
+    nvram set apps_state_upgrade=
     eval "\$(nvram get script_usbmount)"
 elif [ "\$1" == "stop" ]; then
     eval "\$(nvram get script_usbumount)"
 fi
 EOT
 
-    cat <<EOT >> "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/status"
+    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/status"
 Package: asuswrt-usb-network
 Version: 1.0.0.0
 Status: install user installed
@@ -277,13 +297,13 @@ Architecture: $FAKE_ASUS_OPTWARE_ARCH
 Installed-Time: 0
 EOT
 
-    cat <<EOT >> "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/lists/optware.asus"
+    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/lists/optware.asus"
 Package: asuswrt-usb-network
 Version: 1.0.0.0
 Architecture: $FAKE_ASUS_OPTWARE_ARCH
 EOT
 
-    cat <<EOT >> "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/info/asuswrt-usb-network.control"
+    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/info/asuswrt-usb-network.control"
 Package: asuswrt-usb-network
 Architecture: $FAKE_ASUS_OPTWARE_ARCH
 Priority: optional
@@ -298,11 +318,21 @@ EOT
 
     # per src/router/rc/init.c mipsel does not use postfix
     if [ "$(echo "$FAKE_ASUS_OPTWARE_ARCH" | awk '{print tolower($0)}')" = "mipsel" ]; then
-        mv "$DESTINATION_PATH-mnt/asusware.$FAKE_ASUS_OPTWARE_ARCH" "$DESTINATION_PATH-mnt/asusware"
+        mv "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH" "$DESTINATION_PATH/asusware"
     fi
+}
 
-    umount "$DESTINATION_PATH-mnt"
-    rmdir "$DESTINATION_PATH-mnt"
+check_filesystem_in_image() {
+    local IMAGE="$1"
+
+    [ ! -f "$IMAGE" ] && { echo "Image file does not exist"; exit 2; }
+
+    if ! fdisk -l "$IMAGE" | grep -q "Device" | grep -q "Blocks" | grep -q "Boot"; then
+        # occasionally e2fsck will exit with fail code, we need to ignore it to continue
+        e2fsck -pf "$IMAGE" || true
+    else
+        echo "Skipping filesystem check because the image file contains partition table"
+    fi
 }
 
 interrupt() {
@@ -344,7 +374,7 @@ case "$1" in
 
             _TIMER=0
             _TIMEOUT=$WAIT_TIMEOUT
-            while ! debugfs -R "ls -l ." "$TEMP_IMAGE_FILE" 2>/dev/null | grep -q "asuswrt-usb-network" && [ "$_TIMER" -lt "$_TIMEOUT" ]; do
+            while ! debugfs -R "ls -l ." "$TEMP_IMAGE_FILE" 2>/dev/null | grep -q "asuswrt-usb-network-mark" && [ "$_TIMER" -lt "$_TIMEOUT" ]; do
                 _TIMER=$((_TIMER+WAIT_SLEEP))
                 sleep $WAIT_SLEEP
             done
@@ -358,6 +388,11 @@ case "$1" in
         if [ -z "$GADGET_STORAGE_FILE" ]; then
             echo "Setting up gadget \"$GADGET_ID\" with function \"$NETWORK_FUNCTION\"..."
         else
+            if [ -n "$GADGET_STORAGE_FILE" ] && [ -f "$GADGET_STORAGE_FILE" ] && [ "$CHECK_STORAGE_FILE" = true ]; then
+                echo "Checking filesystem in storage file \"$GADGET_STORAGE_FILE\"..."
+                check_filesystem_in_image "$GADGET_STORAGE_FILE"
+            fi
+
             echo "Setting up gadget \"$GADGET_ID\" with combined functions (mass_storage and $NETWORK_FUNCTION)..."
         fi
 
