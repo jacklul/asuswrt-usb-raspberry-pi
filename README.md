@@ -30,6 +30,8 @@ The script on the router also is monitoring for the interface changes in case th
 
 Add `dtoverlay=dwc2` to **/boot/config.txt** and `modules-load=dwc2` to **/boot/cmdline.txt** after `rootwait`.
 
+Make sure you have `debugfs` command available - if not install it with `apt-get install e2fsprogs`.
+
 Install `asuswrt-usb-network` script:
 
 ```bash
@@ -51,9 +53,9 @@ Enable the SSH access in the router, connect to it and then execute this command
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master/install_router.sh" | sh
 ```
 
-_This will install [usb-network.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/usb-network.sh) and modified [startup.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/startup.sh) scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
+_This command will install [usb-network.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/usb-network.sh), [hotplug-event.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/hotplug-event.sh) and (modified) [startup.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/startup.sh) scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
 
-_On Merlin firmware it will use `services-start` scripts instead of `startup.sh`._
+_On Merlin firmware it will use `services-start` scripts instead of `scripts-startup.sh`._
 
 ## Configuration
 
@@ -77,12 +79,7 @@ curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scr
 
 _There are also other useful scripts so make sure to check [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts)._
 
-Edit `force-dns.conf`:
-```sh
-vi /jffs/scripts/force-dns.conf
-```
-
-And paste the following:
+Edit `/jffs/scripts/force-dns.conf` and paste the following:
 ```
 PERMIT_MAC="01:02:03:04:05:06"
 #PERMIT_IP="192.168.1.251-192.168.1.254"
@@ -95,7 +92,7 @@ Replace `01:02:03:04:05:06` with the MAC address of the `usb0` interface on the 
 ```bash
 sudo asuswrt-usb-network status
 ```
-The `Host MAC` is the value you want to use.
+The `Host MAC` is the value you want to pick.
 
 You can add IPs or IP ranges to `PERMIT_IP` variable to prevent that IPs from having their DNS server forced.
 Use `FALLBACK_DNS_SERVER` in case the Pi disconnects from the router, it can also be set to the router's IP address.
@@ -115,14 +112,14 @@ GADGET_STORAGE_FILE="/mass_storage.img"
 
 Then you will need to install few scripts from [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts) on the router:
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/hotplug-event.sh" -o /jffs/scripts/hotplug-event.sh
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/usb-mount.sh" -o /jffs/scripts/usb-mount.sh
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/entware.sh" -o /jffs/scripts/entware.sh
-chmod +x /jffs/scripts/hotplug-event.sh /jffs/scripts/usb-mount.sh /jffs/scripts/entware.sh
-/jffs/scripts/hotplug-event.sh start
+chmod +x /jffs/scripts/usb-mount.sh /jffs/scripts/entware.sh
 ```
 
 Reboot the Pi, wait for the storage to be mounted by `usb-mount.sh` script then install Entware by using this command:
 ```bash
 /jffs/scripts/entware.sh install
 ```
+
+It will now automatically mount and boot Entware after scripts are started.
