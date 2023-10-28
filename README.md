@@ -53,7 +53,7 @@ Enable the SSH access in the router, connect to it and then execute this command
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master/install_router.sh" | sh
 ```
 
-_This command will install [usb-network.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/usb-network.sh), [hotplug-event.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/hotplug-event.sh) and (modified) [startup.sh](https://github.com/jacklul/asuswrt-scripts/blob/master/startup.sh) scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
+_This command will install required scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository and apply required modifications._
 
 _On Merlin firmware it will use `services-start` scripts instead of `scripts-startup.sh`._
 
