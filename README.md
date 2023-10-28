@@ -71,13 +71,11 @@ If it does not then your router might be missing support for executing command i
 
 ## Recommended setup for Pi-hole on a Pi (Zero)
 
-I recommended to also install [`force-dns.sh`](https://github.com/jacklul/asuswrt-scripts/blob/master/scripts/force-dns.sh) script to force LAN and Guest WiFi clients to use the Pi-hole:
+Install [`force-dns.sh`](https://github.com/jacklul/asuswrt-scripts#user-content-force-dnssh) script to force LAN and Guest WiFi clients to use the Pi-hole:
 
 ```sh
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/force-dns.sh" -o /jffs/scripts/force-dns.sh && chmod +x /jffs/scripts/force-dns.sh
 ```
-
-_There are also other useful scripts so make sure to check [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts)._
 
 Edit `/jffs/scripts/force-dns.conf` and paste the following:
 ```
@@ -97,11 +95,20 @@ The `Host MAC` is the value you want to pick.
 You can add IPs or IP ranges to `PERMIT_IP` variable to prevent that IPs from having their DNS server forced.
 Use `FALLBACK_DNS_SERVER` in case the Pi disconnects from the router, it can also be set to the router's IP address.
 
+**When running Pi-hole on the Pi it will be beneficial to run `force-dns.sh` right after Pi connect to the router** - edit `/jffs/scripts/usb-network.conf` and paste the following:
+```
+EXECUTE_COMMAND="/jffs/scripts/force-dns.sh run"
+```
+
 ## Running Entware
 
 Create an image that will serve as storage:
 ```bash
 sudo dd if=/dev/zero of=/mass_storage.img bs=1M count=1024
+# OR use fallocate which is faster
+sudo fallocate -l 1G /mass_storage.img
+
+# format as ext2 for compatibility
 sudo mkfs.ext2 /mass_storage.img
 ```
 
