@@ -17,8 +17,7 @@ SKIP_MASS_STORAGE=false    # skip adding initial mass storage gadget - instead s
 FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation? (requires SKIP_MASS_STORAGE=false)
 FAKE_ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
 TEMP_IMAGE_FILE="/tmp/asuswrt-usb-network.img"    # temporary image file that will be created
-TEMP_IMAGE_SIZE="1M"    # dd's bs parameter, might need to be increased in case router doesn't want to mount the storage
-TEMP_IMAGE_COUNT=1    # dd's count parameter, might need to be increased in case router doesn't want to mount the storage
+TEMP_IMAGE_SIZE=1    # image size in MB, might need to be increased in case router doesn't want to mount the storage
 TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router, ext2 is fine
 TEMP_IMAGE_DELETE=true    # delete temporary image after it is no longer useful?
 WAIT_TIMEOUT=90    # maximum seconds to wait for the router to write to the storage image file, in seconds
@@ -233,15 +232,14 @@ is_started() {
 
 create_image() {
     local FILE="$1"
-    local FILESYSTEM="$2"
-    local SIZE="$3"
-    local COUNT="$4"
+    local SIZE="$2"
+    local FILESYSTEM="$3"
 
     command -v "mkfs.$FILESYSTEM" >/dev/null 2>&1 || { echo "Function \"mkfs.$FILESYSTEM\" not found"; exit 2; }
 
-    echo "Creating image file \"$FILE\" ($FILESYSTEM, $COUNT*$SIZE)..."
+    echo "Creating image file \"$FILE\" ($FILESYSTEM, ${SIZE}M)..."
 
-    { DD_OUTPUT=$(dd if=/dev/zero of="$FILE" bs="$SIZE" count="$COUNT" 2>&1); } || { echo "$DD_OUTPUT"; exit 1; }
+    { DD_OUTPUT=$(dd if=/dev/zero of="$FILE" bs="1M" count="$SIZE" 2>&1); } || { echo "$DD_OUTPUT"; exit 1; }
     { MKFS_OUTPUT=$("mkfs.$FILESYSTEM" "$FILE" 2>&1); } || { echo "$MKFS_OUTPUT"; exit 1; }
 
     mkdir -p "$FILE-mnt"
@@ -365,7 +363,7 @@ case "$1" in
 
             echo "Setting up gadget \"$GADGET_ID\" with function \"mass_storage\"..."
 
-            create_image "$TEMP_IMAGE_FILE" "$TEMP_IMAGE_FS" "$TEMP_IMAGE_SIZE" "$TEMP_IMAGE_COUNT"
+            create_image "$TEMP_IMAGE_FILE" "$TEMP_IMAGE_SIZE" "$TEMP_IMAGE_FS"
 
             add_function "mass_storage" "$TEMP_IMAGE_FILE"
             gadget_up
