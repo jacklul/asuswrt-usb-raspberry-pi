@@ -3,15 +3,21 @@
 [ -f "/rom/jffs.json" ] || { echo "This script must run on the Asus router!"; exit 1; }
 
 MERLIN=0
+BRANCH="master"
+TMP_DIR="/tmp/asuswrt-usb-raspberry-pi"
+
+[ -n "$1" ] && BRANCH="$1"
 [ -f "/usr/sbin/helper.sh" ] && MERLIN=1 && echo "Merlin firmware detected"
 
 set -e
 
+[ ! -d "$TMP_DIR" ] && mkdir -p "$TMP_DIR"
+
 echo "Downloading required scripts..."
 
-[ "$MERLIN" = "0" ] && [ ! -f "/tmp/scripts-startup.sh" ] && curl -sf "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts-startup.sh" -o "/tmp/scripts-startup.sh"
-[ ! -f "/tmp/usb-network.sh" ] && curl -sf "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/usb-network.sh" -o "/tmp/usb-network.sh"
-[ ! -f "/tmp/hotplug-event.sh" ] && curl -sf "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/hotplug-event.sh" -o "/tmp/hotplug-event.sh"
+[ "$MERLIN" = "0" ] && [ ! -f "$TMP_DIR/scripts-startup.sh" ] && curl -fsS "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/$BRANCH/scripts-startup.sh" -o "$TMP_DIR/scripts-startup.sh"
+[ ! -f "$TMP_DIR/usb-network.sh" ] && curl -fsS "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/$BRANCH/scripts/usb-network.sh" -o "$TMP_DIR/usb-network.sh"
+[ ! -f "$TMP_DIR/hotplug-event.sh" ] && curl -fsS "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/$BRANCH/scripts/hotplug-event.sh" -o "$TMP_DIR/hotplug-event.sh"
 
 COMMENT_LINE="# asuswrt-usb-raspberry-pi #"
 
@@ -19,12 +25,14 @@ if [ "$MERLIN" = "0" ]; then
     MODIFICATION="        $COMMENT_LINE
         {
             MOUNTED_PATHS=\"\$(df | grep /dev/sd | awk '{print \$NF}')\"
+            FOUND_PATH=
 
             if [ -n \"\$MOUNTED_PATHS\" ]; then
                 for MOUNTED_PATH in \$MOUNTED_PATHS; do
                     [ ! -d \"\$MOUNTED_PATH/asuswrt-usb-network\" ] && continue
-                    
-                    logger -s -t \"\$SCRIPT_TAG\" \"Waiting for mount \$MOUNTED_PATH to be idle...\"
+                    FOUND_PATH=\"\$MOUNTED_PATH\"
+
+                    logger -st \"\$SCRIPT_TAG\" \"Waiting for mount \$MOUNTED_PATH to be idle...\"
 
                     TIMER=0
                     while [ -n \"\$(lsof | grep \"\$MOUNTED_PATH\")\" ] && [ \"\$TIMER\" -lt \"60\" ] ; do
@@ -32,42 +40,42 @@ if [ "$MERLIN" = "0" ]; then
                         sleep 1
                     done
 
-                    logger -s -t \"\$SCRIPT_TAG\" \"Writing mark to mount \$MOUNTED_PATH...\"
+                    logger -st \"\$SCRIPT_TAG\" \"Writing mark to mount \$MOUNTED_PATH...\"
                     touch \"\$MOUNTED_PATH/asuswrt-usb-network-mark\" && sync
-                    
+
                     if umount \"\$MOUNTED_PATH\"; then
                         rm -rf \"\$MOUNTED_PATH\"
-                        logger -s -t \"\$SCRIPT_TAG\" \"Unmounted \$MOUNTED_PATH...\"
+                        logger -st \"\$SCRIPT_TAG\" \"Unmounted \$MOUNTED_PATH...\"
                     else
-                        logger -s -t \"\$SCRIPT_TAG\" \"Failed to unmount \$MOUNTED_PATH\"
+                        logger -st \"\$SCRIPT_TAG\" \"Failed to unmount \$MOUNTED_PATH\"
                     fi
 
                     break
                 done
-            else
-                logger -s -t \"\$SCRIPT_TAG\" \"Could not find storage mount point\"
             fi
-        } > /dev/null 2>&1 &
+
+            [ -z \"\$FOUND_PATH\" ] && logger -s -t \"\$SCRIPT_TAG\" \"Could not find storage mount point\"
+        } &
         $COMMENT_LINE
 "
 
-    echo "Modifying scripts-startup script..."
+    echo "Modifying \"$TMP_DIR/scripts-startup.sh\"..."
 
-    if ! grep -q "$COMMENT_LINE" "/tmp/scripts-startup.sh"; then
-        LINE="$(grep -Fn "f \"\$CHECK_FILE\" ]; then" "/tmp/scripts-startup.sh")"
+    if ! grep -q "$COMMENT_LINE" "$TMP_DIR/scripts-startup.sh"; then
+        LINE="$(grep -Fn "f \"\$CHECK_FILE\" ]; then" "$TMP_DIR/scripts-startup.sh")"
 
-        [ -z "$LINE" ] && { echo "Failed to modify /tmp/scripts-startup.sh - unable to find correct line"; exit 1; }
+        [ -z "$LINE" ] && { echo "Failed to modify $TMP_DIR/scripts-startup.sh - unable to find correct line"; exit 1; }
 
         LINE="$(echo "$LINE" | cut -d":" -f1)"
         LINE=$((LINE-1))
-        MD5="$(md5sum "/tmp/scripts-startup.sh" | awk '{print $1}')"
+        MD5="$(md5sum "$TMP_DIR/scripts-startup.sh" | awk '{print $1}')"
 
         #shellcheck disable=SC2005
-        echo "$({ head -n $((LINE)) /tmp/scripts-startup.sh; echo "$MODIFICATION"; tail -n +$((LINE+1)) /tmp/scripts-startup.sh; })" > /tmp/scripts-startup.sh
+        echo "$({ head -n $((LINE)) $TMP_DIR/scripts-startup.sh; echo "$MODIFICATION"; tail -n +$((LINE+1)) $TMP_DIR/scripts-startup.sh; })" > $TMP_DIR/scripts-startup.sh
 
-        [ "$MD5" = "$(md5sum "/tmp/scripts-startup.sh")" ] && { echo "Failed to modify /tmp/scripts-startup.sh - modification failed"; exit 1; }
+        [ "$MD5" = "$(md5sum "$TMP_DIR/scripts-startup.sh")" ] && { echo "Failed to modify $TMP_DIR/scripts-startup.sh - modification failed"; exit 1; }
     else
-        echo "Seems like /tmp/scripts-startup.sh is already modified"
+        echo "Seems like \"$TMP_DIR/scripts-startup.sh\" is already modified"
     fi
 else
     [ ! -d /jffs/scripts ] && mkdir /jffs/scripts
@@ -109,28 +117,28 @@ fi
 
 echo "Setting permissions..."
 
-chmod +x "/tmp/scripts-startup.sh" "/tmp/usb-network.sh" "/tmp/hotplug-event.sh"
+chmod +x "$TMP_DIR/scripts-startup.sh" "$TMP_DIR/usb-network.sh" "$TMP_DIR/hotplug-event.sh"
 
-echo "Moving files..."
+echo "Moving files to /jffs..."
 
 mkdir -vp "/jffs/scripts"
 
-if [ "$MERLIN" = "0" ] && [ "$(md5sum "/tmp/scripts-startup.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts-startup.sh" | awk '{print $1}')" ]; then
-    mv -v "/tmp/scripts-startup.sh" "/jffs/scripts-startup.sh"
+if [ "$MERLIN" = "0" ] && [ "$(md5sum "$TMP_DIR/scripts-startup.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts-startup.sh" | awk '{print $1}')" ]; then
+    mv -v "$TMP_DIR/scripts-startup.sh" "/jffs/scripts-startup.sh"
 else
-    rm "/tmp/scripts-startup.sh"
+    rm "$TMP_DIR/scripts-startup.sh"
 fi
 
-if [ "$(md5sum "/tmp/usb-network.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts/usb-network.sh" | awk '{print $1}')" ]; then
-    mv -v "/tmp/usb-network.sh" "/jffs/scripts/usb-network.sh"
+if [ "$(md5sum "$TMP_DIR/usb-network.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts/usb-network.sh" | awk '{print $1}')" ]; then
+    mv -v "$TMP_DIR/usb-network.sh" "/jffs/scripts/usb-network.sh"
 else
-    rm "/tmp/usb-network.sh"
+    rm "$TMP_DIR/usb-network.sh"
 fi
 
-if [ "$(md5sum "/tmp/hotplug-event.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts/hotplug-event.sh" | awk '{print $1}')" ]; then
-    mv -v "/tmp/hotplug-event.sh" "/jffs/scripts/hotplug-event.sh"
+if [ "$(md5sum "$TMP_DIR/hotplug-event.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts/hotplug-event.sh" | awk '{print $1}')" ]; then
+    mv -v "$TMP_DIR/hotplug-event.sh" "/jffs/scripts/hotplug-event.sh"
 else
-    rm "/tmp/hotplug-event.sh"
+    rm "$TMP_DIR/hotplug-event.sh"
 fi
 
 if [ "$MERLIN" = "0" ]; then
@@ -138,5 +146,7 @@ if [ "$MERLIN" = "0" ]; then
 
     /jffs/scripts-startup.sh install
 fi
+
+rm -fr "$TMP_DIR"
 
 echo "Finished!"
