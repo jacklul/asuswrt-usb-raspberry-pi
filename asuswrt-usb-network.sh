@@ -25,29 +25,30 @@ WAIT_SLEEP=1    # time to sleep between each image contents checks, in seconds
 VERIFY_TIMEOUT=60    # maximum seconds to wait for the connection check, in seconds
 VERIFY_SLEEP=1    # time to sleep between each gateway ping, in seconds
 GADGET_ID="usbnet"    # gadget ID used in "/sys/kernel/config/usb_gadget/ID"
-GADGET_PRODUCT="$(tr -d '\0' < /sys/firmware/devicetree/base/model | sed "s/^\(.*\) Rev.*$/\1/") USB Gadget"    # product name, "Raspberry Pi Zero W USB Gadget"
+GADGET_PRODUCT="$(tr -d '\0' < /sys/firmware/devicetree/base/model) USB Gadget"    # product name, like "Raspberry Pi Zero W USB Gadget"
 GADGET_MANUFACTURER="Raspberry Pi Foundation"    # product manufacturer
 GADGET_SERIAL="$(grep Serial /proc/cpuinfo | sed 's/Serial\s*: 0000\(\w*\)/\1/')"    # by default uses CPU serial
 GADGET_VENDOR_ID="0x1d6b"    # 0x1d6b = Linux Foundation
 GADGET_PRODUCT_ID="0x0104"    # 0x0104 = Multifunction Composite Gadget
 GADGET_USB_VERSION="0x0200"    # 0x0200 = USB 2.0, should be left unchanged
-GADGET_DEVICE_VERSION="0x0100"    # should be incremented every time you change your setup (only Windows target systems)
+GADGET_DEVICE_VERSION="0x0100"    # should be incremented every time you change your setup (only matters for Windows, no need to change it)
 GADGET_DEVICE_CLASS="0xef"    # 0xef = Multi-interface device, see https://www.usb.org/defined-class-codes
 GADGET_DEVICE_SUBCLASS="0x02"    # 0x02 = Interface Association Descriptor sub class
 GADGET_DEVICE_PROTOCOL="0x01"    # 0x01 = Interface Association Descriptor protocol
 GADGET_MAX_PACKET_SIZE="0x40"    # declare max packet size, decimal or hex
-GADGET_ATTRIBUTES="0x80"    # 0xc0 = self powered, 0x80 = bus powered
 GADGET_MAX_POWER="250"    # declare max power usage, decimal or hex
+GADGET_ATTRIBUTES="0x80"    # 0xc0 = self powered, 0x80 = bus powered
 GADGET_MAC_VENDOR="B8:27:EB"    # vendor MAC prefix to use in generated MAC address (B8:27:EB = Raspberry Pi Foundation)
 GADGET_MAC_HOST=""    # host MAC address, if empty - MAC address is generated from GADGET_MAC_VENDOR and CPU serial
 GADGET_MAC_DEVICE=""    # device MAC address, if empty - MAC address is generated from CPU serial with 02: prefix
-GADGET_STORAGE_FILE=""    # path to the image file that will be mounted as mass storage, if set will add mass storage function together with network function
+GADGET_STORAGE_FILE=""    # path to the image file that will be mounted as mass storage together with network function
 GADGET_STORAGE_FILE_CHECK=true    # whenever to run e2fsck (check and repair) on image file with each mount
 GADGET_STORAGE_STALL=""    # change value of stall option, empty means system default
 GADGET_STORAGE_REMOVABLE=""    # change value of removable option, empty means system default
 GADGET_STORAGE_CDROM=""    # change value of cdrom option, empty means system default
 GADGET_STORAGE_RO=""    # change value of ro option, empty means system default
 GADGET_STORAGE_NOFUA=""    # change value of nofua option, empty means system default
+GADGET_STORAGE_INQUIRY_STRING=""    # change value of inquiry_string, empty means system default (must be in this format: vendor(len 8) + model(len 16) + rev(len 4))
 GADGET_SCRIPT=""    # run custom script just before gadget creation, must be a valid path to executable script file, receives argument with config path
 
 readonly CONFIG_FILE="/etc/asuswrt-usb-network.conf"
@@ -88,19 +89,32 @@ init_gadget() {
     echo "$GADGET_DEVICE_PROTOCOL" > "$CONFIGFS_DEVICE_PATH/bDeviceProtocol"
     echo "$GADGET_MAX_PACKET_SIZE" > "$CONFIGFS_DEVICE_PATH/bMaxPacketSize0"
 
+    # 0x409 = english
     mkdir "$CONFIGFS_DEVICE_PATH/strings/0x409"
     echo "$GADGET_PRODUCT" > "$CONFIGFS_DEVICE_PATH/strings/0x409/product"
     echo "$GADGET_MANUFACTURER" > "$CONFIGFS_DEVICE_PATH/strings/0x409/manufacturer"
     echo "$GADGET_SERIAL" > "$CONFIGFS_DEVICE_PATH/strings/0x409/serialnumber"
 
     mkdir "$CONFIGFS_DEVICE_PATH/configs/$CONFIG"
-    echo "$GADGET_ATTRIBUTES" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/bmAttributes"
     echo "$GADGET_MAX_POWER" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/MaxPower"
+    echo "$GADGET_ATTRIBUTES" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/bmAttributes"
     mkdir "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409"
 }
 
+set_configuration_string() {
+    local CONFIG="$1"
+    local STRING="$2"
+    local CURRENT="$(cat "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration")"
+
+    if [ ! -f "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration" ] || [ -z "$CURRENT" ]; then
+        echo "$STRING" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration"
+    else
+        echo "$CURRENT + $STRING" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration"
+    fi
+}
+
 add_function() {
-    local FUNCTION="$(echo "$1" | awk '{print tolower($0)}')"
+    local FUNCTION="${1,,}"
     local CONFIG="c.1"
     local INSTANCE="0"
     local LUN_INSTANCE="0"
@@ -119,12 +133,13 @@ add_function() {
             echo "$GADGET_MAC_HOST"  > "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE/dev_addr"
             echo "$GADGET_MAC_DEVICE" > "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE/host_addr"
 
-            echo "${FUNCTION:upper}" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration"
+            set_configuration_string "$CONFIG" "${FUNCTION^^}"
 
             ln -s "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.$INSTANCE" "$CONFIGFS_DEVICE_PATH/configs/$CONFIG"
         ;;
         "mass_storage")
             [ -z "$ARGUMENT" ] && { echo "Image file not provided"; exit 22; }
+            [ ! -f "$ARGUMENT" ] && { echo "Image file does not exist: $ARGUMENT"; exit 2; }
 
             mkdir "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE"
 
@@ -132,17 +147,15 @@ add_function() {
 
             [ ! -d "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE" ] && mkdir "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE"
 
-            if [ -n "$ARGUMENT" ] && [ -f "$ARGUMENT" ]; then
-                [ ! -f "$ARGUMENT" ] && { echo "Image file does not exist: $ARGUMENT"; exit 2; }
+            echo "$ARGUMENT" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/file"
 
-                echo "$ARGUMENT" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/file"
-                [ -n "$GADGET_STORAGE_REMOVABLE" ] && echo "$GADGET_STORAGE_REMOVABLE" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/removable"
-                [ -n "$GADGET_STORAGE_CDROM" ] && echo "$GADGET_STORAGE_CDROM" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/cdrom"
-                [ -n "$GADGET_STORAGE_RO" ] && echo "$GADGET_STORAGE_RO" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/ro"
-                [ -n "$GADGET_STORAGE_NOFUA" ] && echo "$GADGET_STORAGE_NOFUA" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/nofua"
-            fi
+            [ -n "$GADGET_STORAGE_REMOVABLE" ] && echo "$GADGET_STORAGE_REMOVABLE" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/removable"
+            [ -n "$GADGET_STORAGE_CDROM" ] && echo "$GADGET_STORAGE_CDROM" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/cdrom"
+            [ -n "$GADGET_STORAGE_RO" ] && echo "$GADGET_STORAGE_RO" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/ro"
+            [ -n "$GADGET_STORAGE_NOFUA" ] && echo "$GADGET_STORAGE_NOFUA" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/nofua"
+            [ -n "$GADGET_STORAGE_REMOVABLE" ] && echo "$GADGET_STORAGE_INQUIRY_STRING" > "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE/lun.$LUN_INSTANCE/inquiry_string"
 
-            echo "Mass Storage" > "$CONFIGFS_DEVICE_PATH/configs/$CONFIG/strings/0x409/configuration"
+            set_configuration_string "$CONFIG" "Mass Storage"
 
             ln -s "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$INSTANCE" "$CONFIGFS_DEVICE_PATH/configs/$CONFIG"
         ;;
@@ -196,9 +209,9 @@ gadget_down() {
 }
 
 generate_mac_addresses() {
-    local GADGET_SERIAL_LOWER="$(echo "$GADGET_SERIAL" | awk '{print tolower($0)}')"
+    local GADGET_SERIAL="${GADGET_SERIAL^^}"
 
-    [ -z "$GADGET_MAC_DEVICE" ] && GADGET_MAC_DEVICE="02:$(echo "$GADGET_SERIAL_LOWER" | sed 's/\(\w\w\)/:\1/g' | cut -b 5-)"
+    [ -z "$GADGET_MAC_DEVICE" ] && GADGET_MAC_DEVICE="02:$(echo "$GADGET_SERIAL" | sed 's/\(\w\w\)/:\1/g' | cut -b 5-)"
 
     if [ "$(echo "$GADGET_MAC_DEVICE" | awk -F":" '{print NF-1}')" != "5" ]; then
         echo "Invalid device MAC address: $GADGET_MAC_DEVICE"
@@ -211,7 +224,7 @@ generate_mac_addresses() {
             exit 22
         fi
 
-        GADGET_MAC_HOST="$(echo "$GADGET_MAC_VENDOR" | awk '{print tolower($0)}'):$(echo "$GADGET_SERIAL_LOWER" | sed 's/\(\w\w\)/:\1/g' | cut -b 11-)"
+        GADGET_MAC_HOST="${GADGET_MAC_VENDOR^^}:$(echo "$GADGET_SERIAL" | sed 's/\(\w\w\)/:\1/g' | cut -b 11-)"
     fi
 
     if [ "$(echo "$GADGET_MAC_HOST" | awk -F":" '{print NF-1}')" != "5" ]; then
@@ -320,7 +333,7 @@ Installed-Size: 1
 EOT
 
     # per src/router/rc/init.c and src/router/rom/apps_scripts/ mipsel does not use a postfix
-    if [ "$(echo "$FAKE_ASUS_OPTWARE_ARCH" | awk '{print tolower($0)}')" = "mipsel" ]; then
+    if [ "${FAKE_ASUS_OPTWARE_ARCH,,}" = "mipsel" ]; then
         mv "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH" "$DESTINATION_PATH/asusware"
     fi
 }
@@ -452,7 +465,7 @@ case "$1" in
             echo "Gadget \"$GADGET_ID\" is not running."
         fi
 
-        FUNCTION="$(echo "$NETWORK_FUNCTION" | awk '{print tolower($0)}')"
+        FUNCTION="${NETWORK_FUNCTION,,}"
         if [ -f "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname" ]; then
             INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname")"
             IP_ADDRESS="$(ip -f inet addr show "$INTERFACE" | sed -En -e 's/.*inet ([0-9.]+).*/\1/p')"
