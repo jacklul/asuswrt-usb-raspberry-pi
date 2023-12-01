@@ -21,6 +21,7 @@ TEMP_IMAGE_SIZE=1    # image size in MB, might need to be increased in case rout
 TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router, ext2 is fine
 TEMP_IMAGE_DELETE=true    # delete temporary image after it is no longer useful?
 WAIT_TIMEOUT=90    # maximum seconds to wait for the router to write to the storage image file, in seconds
+WAIT_RETRY=0    # how many seconds to wait before recreating the gadget device, must be set to at least 10 and lower than WAIT_TIMEOUT to work
 WAIT_SLEEP=1    # time to sleep between each image contents checks, in seconds
 VERIFY_TIMEOUT=60    # maximum seconds to wait for the connection check, in seconds
 VERIFY_SLEEP=1    # time to sleep between each gateway ping, in seconds
@@ -73,7 +74,7 @@ init_gadget() {
         [ -n "$(cat "$CONFIGFS_DEVICE_PATH/UDC")" ] && { echo "Gadget \"$GADGET_ID\" is already up"; exit 16; }
 
         echo "Cleaning up old gadget \"$GADGET_ID\"...";
-        gadget_down silent
+        gadget_down silent && gadget_cleanup silent
     fi
 
     modprobe libcomposite
@@ -180,13 +181,9 @@ gadget_up() {
 }
 
 gadget_down() {
-    local ARG="$1"
-
-    [ ! -d "$CONFIGFS_DEVICE_PATH" ] && { echo "Gadget \"$GADGET_ID\" is already down"; exit 19; }
-
-    [ "$ARG" != "silent" ] && echo "Taking down gadget \"$GADGET_ID\"...";
-
     if [ -d "$CONFIGFS_DEVICE_PATH" ]; then
+        [ "$1" != "silent" ] && echo "Taking down gadget \"$GADGET_ID\"...";
+
         [ -n "$(cat "$CONFIGFS_DEVICE_PATH/UDC")" ] && echo "" > "$CONFIGFS_DEVICE_PATH/UDC"
 
         local INSTANCE_NET=$(find $CONFIGFS_DEVICE_PATH/functions/ -maxdepth 2 -name "ifname" | grep -o '/*[^.]*/$' || echo "")
@@ -196,6 +193,15 @@ gadget_down() {
 
             [ -d "/sys/class/net/$INTERFACE" ] && ifconfig "$INTERFACE" down
         fi
+    else
+        echo "Gadget \"$GADGET_ID\" is already down"
+        return 19
+    fi
+}
+
+gadget_cleanup() {
+    if [ -d "$CONFIGFS_DEVICE_PATH" ]; then
+        [ "$1" != "silent" ] && echo "Cleaning up gadget \"$GADGET_ID\"...";
 
         find $CONFIGFS_DEVICE_PATH/configs/*/* -maxdepth 0 -type l -exec rm {} \; 2> /dev/null || true
         find $CONFIGFS_DEVICE_PATH/configs/*/strings/* -maxdepth 0 -type d -exec rmdir {} \; 2> /dev/null || true
@@ -354,7 +360,7 @@ check_filesystem_in_image() {
 interrupt() {
     echo -e "\rInterrupt by user, cleaning up..."
 
-    is_started || gadget_down silent
+    is_started || { gadget_down silent && gadget_cleanup silent; }
 
     [ "$TEMP_IMAGE_DELETE" = true ] && rm -f "$TEMP_IMAGE_FILE"
 }
@@ -369,7 +375,7 @@ case "$1" in
         trap interrupt SIGINT SIGTERM SIGQUIT
         set -e
 
-        [ -d "$CONFIGFS_DEVICE_PATH" ] && gadget_down
+        [ -d "$CONFIGFS_DEVICE_PATH" ] && { gadget_down && gadget_cleanup silent; }
 
         if [ "$SKIP_MASS_STORAGE" = false ]; then
             [ -z "$TEMP_IMAGE_FILE" ] && { echo "Temporary image file is not set"; exit 22; }
@@ -388,16 +394,25 @@ case "$1" in
 
             echo "Waiting for the router to write mark to the image (timeout: ${WAIT_TIMEOUT}s)...."
 
+            [ "$WAIT_RETRY" -ge "$WAIT_TIMEOUT" ] && WAIT_RETRY=0
+
             _TIMER=0
+            _RETRY=0
             _TIMEOUT=$WAIT_TIMEOUT
             while ! debugfs -R "ls -l ." "$TEMP_IMAGE_FILE" 2>/dev/null | grep -q "asuswrt-usb-network-mark" && [ "$_TIMER" -lt "$_TIMEOUT" ]; do
+                if [ "$WAIT_RETRY" -ge 10 ] && [ "$((_TIMER-_RETRY))" -ge "$WAIT_RETRY" ]; then
+                    _RETRY=$((_RETRY+WAIT_RETRY))
+                    echo "Recreating gadget \"$GADGET_ID\"..."
+                    gadget_down silent && gadget_up silent
+                fi
+
                 _TIMER=$((_TIMER+WAIT_SLEEP))
                 sleep $WAIT_SLEEP
             done
 
             [ "$_TIMER" -ge "$_TIMEOUT" ] && echo "Timeout reached, continuing anyway..."
 
-            gadget_down
+            gadget_down && gadget_cleanup silent
             [ "$TEMP_IMAGE_DELETE" = true ] && rm -f "$TEMP_IMAGE_FILE"
         fi
 
@@ -456,7 +471,7 @@ case "$1" in
     ;;
     "stop")
         require_root
-        gadget_down
+        gadget_down && gadget_cleanup
     ;;
     "status")
         if [ -d "$CONFIGFS_DEVICE_PATH" ] && [ -n "$(cat "$CONFIGFS_DEVICE_PATH/UDC")" ]; then
