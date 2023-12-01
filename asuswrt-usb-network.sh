@@ -11,46 +11,46 @@
 # shellcheck disable=2155,1090
 
 # Configuration variables
-NETWORK_FUNCTION="ecm"    # network gadget function to use, supported are: rndis, ecm (recommended), eem, ncm
-VERIFY_CONNECTION=true    # verify that we can reach gateway after enabling network gadget? (recommended if using services depending on network-online.target)
-SKIP_MASS_STORAGE=false    # skip adding initial mass storage gadget - instead setup network gadget right away? (useful only on Merlin firmware)
-FAKE_ASUS_OPTWARE=false    # launch command in "script_usbmount" nvram variable through fake Asus' Optware installation? (requires SKIP_MASS_STORAGE=false)
-FAKE_ASUS_OPTWARE_ARCH="arm"    # Optware architecture supported by the router (known values: arm, mipsbig, mipsel)
-TEMP_IMAGE_FILE="/tmp/asuswrt-usb-network.img"    # temporary image file that will be created
-TEMP_IMAGE_SIZE=1    # image size in MB, might need to be increased in case router doesn't want to mount the storage
-TEMP_IMAGE_FS="ext2"    # filesystem to use, must be supported by "mkfs." command and the router, ext2 is fine
-TEMP_IMAGE_DELETE=true    # delete temporary image after it is no longer useful?
-WAIT_TIMEOUT=90    # maximum seconds to wait for the router to write to the storage image file, in seconds
-WAIT_RETRY=0    # how many seconds to wait before recreating the gadget device, must be set to at least 10 and lower than WAIT_TIMEOUT to work
-WAIT_SLEEP=1    # time to sleep between each image contents checks, in seconds
-VERIFY_TIMEOUT=60    # maximum seconds to wait for the connection check, in seconds
-VERIFY_SLEEP=1    # time to sleep between each gateway ping, in seconds
-GADGET_ID="usbnet"    # gadget ID used in "/sys/kernel/config/usb_gadget/ID"
-GADGET_PRODUCT="$(tr -d '\0' < /sys/firmware/devicetree/base/model) USB Gadget"    # product name, like "Raspberry Pi Zero W USB Gadget"
-GADGET_MANUFACTURER="Raspberry Pi Foundation"    # product manufacturer
-GADGET_SERIAL="$(grep Serial /proc/cpuinfo | sed 's/Serial\s*: 0000\(\w*\)/\1/')"    # by default uses CPU serial
-GADGET_VENDOR_ID="0x1d6b"    # 0x1d6b = Linux Foundation
-GADGET_PRODUCT_ID="0x0104"    # 0x0104 = Multifunction Composite Gadget
-GADGET_USB_VERSION="0x0200"    # 0x0200 = USB 2.0, should be left unchanged
-GADGET_DEVICE_VERSION="0x0100"    # should be incremented every time you change your setup (only matters for Windows, no need to change it)
-GADGET_DEVICE_CLASS="0xef"    # 0xef = Multi-interface device, see https://www.usb.org/defined-class-codes
-GADGET_DEVICE_SUBCLASS="0x02"    # 0x02 = Interface Association Descriptor sub class
-GADGET_DEVICE_PROTOCOL="0x01"    # 0x01 = Interface Association Descriptor protocol
-GADGET_MAX_PACKET_SIZE="0x40"    # declare max packet size, decimal or hex
-GADGET_MAX_POWER="250"    # declare max power usage, decimal or hex
-GADGET_ATTRIBUTES="0x80"    # 0xc0 = self powered, 0x80 = bus powered
-GADGET_MAC_VENDOR="B8:27:EB"    # vendor MAC prefix to use in generated MAC address (B8:27:EB = Raspberry Pi Foundation)
-GADGET_MAC_HOST=""    # host MAC address, if empty - MAC address is generated from GADGET_MAC_VENDOR and CPU serial
-GADGET_MAC_DEVICE=""    # device MAC address, if empty - MAC address is generated from CPU serial with 02: prefix
-GADGET_STORAGE_FILE=""    # path to the image file that will be mounted as mass storage together with network function
-GADGET_STORAGE_FILE_CHECK=true    # whenever to run e2fsck (check and repair) on image file with each mount
-GADGET_STORAGE_STALL=""    # change value of stall option, empty means system default
-GADGET_STORAGE_REMOVABLE=""    # change value of removable option, empty means system default
-GADGET_STORAGE_CDROM=""    # change value of cdrom option, empty means system default
-GADGET_STORAGE_RO=""    # change value of ro option, empty means system default
-GADGET_STORAGE_NOFUA=""    # change value of nofua option, empty means system default
-GADGET_STORAGE_INQUIRY_STRING=""    # change value of inquiry_string, empty means system default (must be in this format: vendor(len 8) + model(len 16) + rev(len 4))
-GADGET_SCRIPT=""    # run custom script just before gadget creation, must be a valid path to executable script file, receives argument with config path
+NETWORK_FUNCTION="ecm"
+VERIFY_CONNECTION=true
+SKIP_MASS_STORAGE=false
+FAKE_ASUS_OPTWARE=false
+FAKE_ASUS_OPTWARE_ARCH="arm"
+TEMP_IMAGE_FILE="/tmp/asuswrt-usb-network.img"
+TEMP_IMAGE_SIZE=1
+TEMP_IMAGE_FS="ext2"
+TEMP_IMAGE_DELETE=true
+WAIT_TIMEOUT=90
+WAIT_RETRY=0
+WAIT_SLEEP=1
+VERIFY_TIMEOUT=60
+VERIFY_SLEEP=1
+GADGET_ID="usbnet"
+GADGET_PRODUCT="$(tr -d '\0' < /sys/firmware/devicetree/base/model) USB Gadget"
+GADGET_MANUFACTURER="Raspberry Pi Foundation"
+GADGET_SERIAL="$(grep Serial /proc/cpuinfo | sed 's/Serial\s*: 0000\(\w*\)/\1/')"
+GADGET_VENDOR_ID="0x1d6b"
+GADGET_PRODUCT_ID="0x0104"
+GADGET_USB_VERSION="0x0200"
+GADGET_DEVICE_VERSION="0x0100"
+GADGET_DEVICE_CLASS="0xef"
+GADGET_DEVICE_SUBCLASS="0x02"
+GADGET_DEVICE_PROTOCOL="0x01"
+GADGET_MAX_PACKET_SIZE="0x40"
+GADGET_MAX_POWER="250"
+GADGET_ATTRIBUTES="0x80"
+GADGET_MAC_VENDOR="B8:27:EB"
+GADGET_MAC_HOST=""
+GADGET_MAC_DEVICE=""
+GADGET_STORAGE_FILE=""
+GADGET_STORAGE_FILE_CHECK=true
+GADGET_STORAGE_STALL=""
+GADGET_STORAGE_REMOVABLE=""
+GADGET_STORAGE_CDROM=""
+GADGET_STORAGE_RO=""
+GADGET_STORAGE_NOFUA=""
+GADGET_STORAGE_INQUIRY_STRING=""
+GADGET_SCRIPT=""
 
 readonly CONFIG_FILE="/etc/asuswrt-usb-network.conf"
 if [ -f "$CONFIG_FILE" ]; then

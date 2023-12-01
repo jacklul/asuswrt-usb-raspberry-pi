@@ -26,7 +26,7 @@ The script on the router also is monitoring for the interface changes in case th
 
 ## Installation
 
-### **On the Raspberry Pi:**
+### On the Raspberry Pi:
 
 Add `dtoverlay=dwc2` to **/boot/config.txt** and `modules-load=dwc2` to **/boot/cmdline.txt** after `rootwait`.
 
@@ -45,7 +45,9 @@ sudo systemctl enable asuswrt-usb-network.service
 
 If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true` in `/etc/asuswrt-usb-network.conf`.
 
-### **On the Asus router:**
+For the full list of configuration variables - [look below](#configuration).
+
+### On the Asus router:
 
 Enable the SSH access in the router, connect to it and then execute this command to install required scripts:
 
@@ -57,17 +59,58 @@ _This command will install required scripts from [jacklul/asuswrt-scripts](https
 
 _On Merlin firmware it will use `services-start` scripts instead of `scripts-startup.sh`._
 
-## Configuration
-
-You can override configuration variables in `/etc/asuswrt-usb-network.conf`.
-
-To see the list of possible variables peek into [asuswrt-usb-network.sh](asuswrt-usb-network.sh).
-
-### **Finish**
+### Finish
 
 Power off the router, connect your Pi to router's USB port and then turn the router on - in a few minutes it should all be working smoothly!
 
 If it does not then your router might be missing support for executing command in `script_usbmount` NVRAM variable on USB mount - in that case set `FAKE_ASUS_OPTWARE=true` in the configuration, you might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router.
+
+## Configuration
+
+You can set configuration variables in `/etc/asuswrt-usb-network.conf`.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| NETWORK_FUNCTION | "ecm" | Network gadget function to use<br>Supported values are: `rndis, ecm (recommended), eem, ncm` |
+| VERIFY_CONNECTION | true | Verify that we can reach gateway after enabling network gadget?<br>Recommended if using services depending on systemd's `network-online.target` |
+| SKIP_MASS_STORAGE | false | Skip adding initial mass storage gadget - instead setup network gadget right away?<br>This is only useful on Merlin firmware |
+| FAKE_ASUS_OPTWARE | false | Launch command in `script_usbmount` nvram variable through fake Asus' Optware installation?<br>(requires `SKIP_MASS_STORAGE=false`) |
+| FAKE_ASUS_OPTWARE_ARCH | "arm" | Optware architecture supported by the router<br>Known values are: `arm, mipsbig, mipsel` |
+| TEMP_IMAGE_FILE | "/tmp/asuswrt-usb-network.img" | Temporary image file that will be created |
+| TEMP_IMAGE_SIZE | 1 | Image size in MB, might need to be increased in case your router doesn't want to mount the storage due to partition size errors |
+| TEMP_IMAGE_FS | "ext2" | Filesystem to use, must be supported by `mkfs.` command and the router, `ext2` should be fine in most cases |
+| TEMP_IMAGE_DELETE | true | Delete temporary image after it is no longer useful? |
+| WAIT_TIMEOUT | 90 | Maximum seconds to wait for the router to write to the storage image file<br>After this time is reached the script will continue as normal |
+| WAIT_RETRY | 0 | How many seconds to wait before recreating the gadget device<br>Must be set to at least 10 and lower than `WAIT_TIMEOUT` to work<br>Gadget restart can happen multiple times if `WAIT_TIMEOUT / WAIT_RETRY` is 2 or bigger |
+| WAIT_SLEEP | 1 | Time to sleep between each image contents checks, in seconds |
+| VERIFY_TIMEOUT | 60 | Maximum seconds to wait for the connection check |
+| VERIFY_SLEEP | 1 | Time to sleep between each gateway ping, in seconds |
+| GADGET_ID | "usbnet" | Gadget ID used in configfs path `/sys/kernel/config/usb_gadget/[ID]` |
+| GADGET_PRODUCT | `(generated)` | Product name, for example: "Raspberry Pi Zero W USB Gadget"<br>(generated from `/sys/firmware/devicetree/base/model`) |
+| GADGET_MANUFACTURER | "Raspberry Pi Foundation" | Product manufacturer |
+| GADGET_SERIAL | `(generated)` | Device serial number, by default uses CPU serial<br>(generated from `/proc/cpuinfo`) |
+| GADGET_VENDOR_ID | "0x1d6b" | `0x1d6b` = Linux Foundation |
+| GADGET_PRODUCT_ID | "0x0104" | `0x0104` = Multifunction Composite Gadget |
+| GADGET_USB_VERSION | "0x0200" | `0x0200` = USB 2.0, should be left unchanged |
+| GADGET_DEVICE_VERSION | "0x0100" | Should be incremented every time you change your setup<br>This only matters for Windows, no need to change it when plugging into Linux machines |
+| GADGET_DEVICE_CLASS | "0xef" | `0xef` = Multi-interface device<br>see https://www.usb.org/defined-class-codes |
+| GADGET_DEVICE_SUBCLASS | "0x02" | `0x02` = Interface Association Descriptor sub class |
+| GADGET_DEVICE_PROTOCOL | "0x01" | `0x01` = Interface Association Descriptor protocol |
+| GADGET_MAX_PACKET_SIZE | "0x40" | Declare max packet size, decimal or hex |
+| GADGET_MAX_POWER | "250" | Declare max power usage, decimal or hex |
+| GADGET_ATTRIBUTES | "0x80" | `0xc0` = self powered, `0x80` = bus powered, should be left as bus powered |
+| GADGET_MAC_VENDOR | "B8:27:EB" | Vendor MAC prefix to use in generated MAC address (`B8:27:EB` = Raspberry Pi Foundation) |
+| GADGET_MAC_HOST | " " | Host MAC address, if empty - MAC address is generated from `GADGET_MAC_VENDOR` and CPU serial |
+| GADGET_MAC_DEVICE | " " | Device MAC address, if empty - MAC address is generated from CPU serial with `02:` prefix |
+| GADGET_STORAGE_FILE | " " | Path to the image file that will be mounted as mass storage together with network function |
+| GADGET_STORAGE_FILE_CHECK | true | Whenever to run **e2fsck** (check and repair) on image file with each mount |
+| GADGET_STORAGE_STALL | " " | Change value of `stall` option, empty means system default |
+| GADGET_STORAGE_REMOVABLE | " " | Change value of `removable` option, empty means system default<br>Automatically set to 1 when attaching image file |
+| GADGET_STORAGE_CDROM | " " | Change value of `cdrom` option, empty means system default |
+| GADGET_STORAGE_RO | " " | Change value of `ro` option, empty means system default |
+| GADGET_STORAGE_NOFUA | " " | Change value of `nofua` option, empty means system default |
+| GADGET_STORAGE_INQUIRY_STRING | " " | Change value of `inquiry_string`, empty means system default<br>Must be in this format: `vendor(len 8) + model(len 16) + rev(len 4)` |
+| GADGET_SCRIPT | " " | Run custom script just before gadget creation, must be a valid path to executable script file, receives argument with device's `configfs` path |
 
 ## Recommended setup for Pi-hole on a Pi (Zero)
 
