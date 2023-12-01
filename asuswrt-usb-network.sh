@@ -500,7 +500,7 @@ case "$1" in
         [ -n "$IP_ADDRESS" ] && echo "IP address: $IP_ADDRESS"
         [ -n "$GADGET_MAC_DEVICE" ] && echo "Device MAC address: $GADGET_MAC_DEVICE"
 
-        if [ -n "$MAC_ADDRESS" ] && [ "$MAC_ADDRESS" != "$GADGET_MAC_HOST" ]; then
+        if [ -n "$MAC_ADDRESS" ] && [ "${MAC_ADDRESS^^}" != "${GADGET_MAC_HOST^^}" ]; then
             echo "Host MAC address (actual): $MAC_ADDRESS"
             echo "Host MAC address (config): $GADGET_MAC_HOST"
         else
