@@ -295,21 +295,26 @@ if [ "\$1" = "start" ]; then
     SCRIPT="\$(nvram get script_usbmount)"
     [ -n "\$SCRIPT" ] && eval "\$SCRIPT" || true
 
-    nvram set apps_state_autorun=
-    nvram set apps_state_install=
-    nvram set apps_state_remove=
-    nvram set apps_state_switch=
-    nvram set apps_state_stop=
-    nvram set apps_state_enable=
-    nvram set apps_state_update=
-    nvram set apps_state_upgrade=
-    nvram set apps_state_cancel=
-    nvram set apps_state_error=
-    nvram set apps_state_action=
-    nvram set apps_mounted_path=
-    nvram set apps_dev=
+    {
+        sleep 10
+        nvram set apps_state_autorun=
+        nvram set apps_state_install=
+        nvram set apps_state_remove=
+        nvram set apps_state_switch=
+        nvram set apps_state_stop=
+        nvram set apps_state_enable=
+        nvram set apps_state_update=
+        nvram set apps_state_upgrade=
+        nvram set apps_state_cancel=
+        nvram set apps_state_error=
+        nvram set apps_state_action=
+        nvram set apps_mounted_path=
+        nvram set apps_dev=
+    } &
 fi
 EOT
+
+    chmod +x "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 
     cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/status"
 Package: asuswrt-usb-network
