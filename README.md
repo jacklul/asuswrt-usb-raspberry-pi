@@ -43,7 +43,14 @@ Then enable it:
 sudo systemctl enable asuswrt-usb-network.service
 ```
 
-If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true` in `/etc/asuswrt-usb-network.conf`.
+Modify configuration - `sudo nano /etc/asuswrt-usb-network.conf`:
+
+- If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true`
+  -- _We are using `services-start` script here, no need to use `script_usbmount` NVRAM variable_
+
+- If you're running stock firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
+	-- _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
+	-- _You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router_
 
 For the full list of configuration variables - [look below](#configuration).
 
@@ -61,9 +68,9 @@ _On Merlin firmware it will use `services-start` scripts instead of `scripts-sta
 
 ### Finish
 
-Power off the router, connect your Pi to router's USB port and then turn the router on - in a few minutes it should all be working smoothly!
+Power off the router, connect your Pi to the router's USB port and then turn it on - in a few minutes it should all be working smoothly!
 
-If it does not then your router might be missing support for executing command in `script_usbmount` NVRAM variable on USB mount - in that case set `FAKE_ASUS_OPTWARE=true` in the configuration, you might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router.
+If it does not work and you're running stock firmware then make sure you are using build-in workaround - [see "Modify configuration" step above](#on-the-raspberry-pi).
 
 ## Configuration
 
