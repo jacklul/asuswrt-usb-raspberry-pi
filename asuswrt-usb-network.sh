@@ -167,14 +167,22 @@ add_function() {
     esac
 }
 
+get_network_instance() {
+    local INSTANCE_PATH=$(find $CONFIGFS_DEVICE_PATH/functions/ -maxdepth 2 -name "ifname" || echo "")
+
+    if [ -n "$INSTANCE_PATH" ]; then
+        basename "$(dirname "$INSTANCE_PATH")"
+    fi
+}
+
 gadget_up() {
     udevadm settle -t 5 || :
     ls /sys/class/udc > "$CONFIGFS_DEVICE_PATH/UDC"
 
-    local INSTANCE_NET=$(find $CONFIGFS_DEVICE_PATH/functions/ -maxdepth 2 -name "ifname" | grep -o '/*[^.]*/$' || echo "")
+    local NET_INSTANCE="$(get_network_instance)"
 
-    if [ -n "$INSTANCE_NET" ] && [ -f "$CONFIGFS_DEVICE_PATH/functions/$INSTANCE_NET/ifname" ]; then
-        local INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$INSTANCE_NET/ifname")"
+    if [ -n "$NET_INSTANCE" ]; then
+        local INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$NET_INSTANCE/ifname")"
 
         ifconfig "$INTERFACE" up
     fi
@@ -186,10 +194,10 @@ gadget_down() {
 
         [ -n "$(cat "$CONFIGFS_DEVICE_PATH/UDC")" ] && echo "" > "$CONFIGFS_DEVICE_PATH/UDC"
 
-        local INSTANCE_NET=$(find $CONFIGFS_DEVICE_PATH/functions/ -maxdepth 2 -name "ifname" | grep -o '/*[^.]*/$' || echo "")
+        local NET_INSTANCE="$(get_network_instance)"
 
-        if [ -n "$INSTANCE_NET" ] && [ -f "$CONFIGFS_DEVICE_PATH/functions/$INSTANCE_NET/ifname" ]; then
-            local INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$INSTANCE_NET/ifname")"
+        if [ -n "$NET_INSTANCE" ]; then
+            local INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$NET_INSTANCE/ifname")"
 
             [ -d "/sys/class/net/$INTERFACE" ] && ifconfig "$INTERFACE" down
         fi
@@ -241,9 +249,9 @@ generate_mac_addresses() {
 
 is_started() {
     if [ -d "$CONFIGFS_DEVICE_PATH" ]; then
-        local INSTANCE_NET=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 2 -name "ifname" || echo "")
+        local NET_INSTANCE="$(get_network_instance)"
 
-        [ -n "$INSTANCE_NET" ] && return 0
+        [ -n "$NET_INSTANCE" ] && return 0
     fi
 
     return 1
@@ -392,8 +400,8 @@ case "$1" in
             add_function "mass_storage" "$TEMP_IMAGE_FILE"
             gadget_up
 
-            MS_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 1 -name "mass_storage.*" | grep -o '[^.]*$' || echo "")
-            LUN_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions/mass_storage.$MS_INSTANCE" -maxdepth 1 -name "lun.*" | grep -o '[^.]*$' || echo "")
+            MS_INSTANCE=$(find "$CONFIGFS_DEVICE_PATH/functions" -maxdepth 1 -name "mass_storage.*" | grep -o '[^.]*$' || echo "")
+            LUN_INSTANCE=$(find "$CONFIGFS_DEVICE_PATH/functions/mass_storage.$MS_INSTANCE" -maxdepth 1 -name "lun.*" | grep -o '[^.]*$' || echo "")
 
             { [ -z "$MS_INSTANCE" ] || [ -z "$LUN_INSTANCE" ]; } && { echo "Could not find function or LUN instance"; exit 2; }
 
@@ -448,8 +456,8 @@ case "$1" in
 
         gadget_up
 
-        NET_INSTANCE=$(find "/sys/kernel/config/usb_gadget/$GADGET_ID/functions" -maxdepth 1 -name "$NETWORK_FUNCTION.*" | grep -o '[^.]*$' || echo "")
-        NET_INTERFACE=$(cat "/sys/kernel/config/usb_gadget/$GADGET_ID/functions/$NETWORK_FUNCTION.$NET_INSTANCE/ifname")
+        NET_INSTANCE=$(find "$CONFIGFS_DEVICE_PATH/functions" -maxdepth 1 -name "$NETWORK_FUNCTION.*" | grep -o '[^.]*$' || echo "")
+        NET_INTERFACE=$(cat "$CONFIGFS_DEVICE_PATH/functions/$NETWORK_FUNCTION.$NET_INSTANCE/ifname")
 
         { [ -z "$NET_INSTANCE" ] || [ -z "$NET_INTERFACE" ]; } && { echo "Could not find function instance or read assigned network interface"; exit 2; }
 
@@ -485,18 +493,19 @@ case "$1" in
             echo "Gadget \"$GADGET_ID\" is not running."
         fi
 
-        FUNCTION="${NETWORK_FUNCTION,,}"
-        if [ -f "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname" ]; then
-            INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0/ifname")"
+        NET_INSTANCE="$(get_network_instance)"
+        if [ -n "$NET_INSTANCE" ]; then
+            INTERFACE="$(cat "$CONFIGFS_DEVICE_PATH/functions/$NET_INSTANCE/ifname")"
             IP_ADDRESS="$(ip -f inet addr show "$INTERFACE" | sed -En -e 's/.*inet ([0-9.]+).*/\1/p')"
             MAC_ADDRESS="$(ip -f link addr show "$INTERFACE" | sed -En -e 's/.*link.*([0-9a-fA-F:]{17}) .*/\1/p')"
         else
-            echo "No such function: $CONFIGFS_DEVICE_PATH/functions/$FUNCTION.0"
+            echo "Network interface not found."
         fi
 
         echo ""
         generate_mac_addresses
 
+        [ -n "$INTERFACE" ] && echo "Interface: $INTERFACE"
         [ -n "$IP_ADDRESS" ] && echo "IP address: $IP_ADDRESS"
         [ -n "$GADGET_MAC_DEVICE" ] && echo "Device MAC address: $GADGET_MAC_DEVICE"
 
