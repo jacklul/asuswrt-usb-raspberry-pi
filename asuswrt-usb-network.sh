@@ -16,6 +16,7 @@ VERIFY_CONNECTION=true
 SKIP_MASS_STORAGE=false
 FAKE_ASUS_OPTWARE=false
 FAKE_ASUS_OPTWARE_ARCH="arm"
+FAKE_ASUS_OPTWARE_CMD="/bin/sh /jffs/scripts-startup.sh start"
 TEMP_IMAGE_FILE="/tmp/asuswrt-usb-network.img"
 TEMP_IMAGE_SIZE=1
 TEMP_IMAGE_FS="ext2"
@@ -294,17 +295,36 @@ create_fake_asus_optware() {
     echo "dest /opt/ /" > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/ipkg.conf"
     touch "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/.asusrouter"
 
-    # list of state vars taken from src/router/rc/services.c
-    # we reset some apps_ vars to not end up with random bugs (web UI persistently trying to install apps in a loop)
-    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+    if [ -n "$FAKE_ASUS_OPTWARE_CMD" ]; then
+        cat <<EOT > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 #!/bin/sh
 
 if [ "\$1" = "start" ]; then
-    SCRIPT="\$(nvram get script_usbmount)"
-    [ -n "\$SCRIPT" ] && eval "\$SCRIPT" || true
+    eval "$FAKE_ASUS_OPTWARE_CMD" || true
+EOT
+    else
+        cat <<EOT > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+#!/bin/sh
+
+if [ "\$1" = "start" ]; then
+    NVRAM_SCRIPT="\$(nvram get script_usbmount)"
+
+    if [ -n "\$NVRAM_SCRIPT" ]; then
+        logger -t "asuswrt-usb-network" "Executing command in \"script_usbmount\"..."
+        eval "\$NVRAM_SCRIPT" || true
+    else
+        logger -t "asuswrt-usb-network" "Unable to execute command in \"script_usbmount\" - value is empty"
+    fi
+
+EOT
+    fi
+
+    # list of state vars taken from src/router/rc/services.c
+    # we reset some apps_ vars to not end up with random bugs (web UI persistently trying to install apps in a loop)
+    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 
     {
-        sleep 10
+        sleep 15
         nvram set apps_state_autorun=
         nvram set apps_state_install=
         nvram set apps_state_remove=

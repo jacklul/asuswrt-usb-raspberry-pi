@@ -46,11 +46,12 @@ sudo systemctl enable asuswrt-usb-network.service
 Modify configuration - `sudo nano /etc/asuswrt-usb-network.conf`:
 
 - If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true`
-  -- _We are using `services-start` script here, no need to use `script_usbmount` NVRAM variable_
+  -- _We are using `services-start` script here, no need to use command startup method_
 
 - If you're running stock firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
-	-- _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
-	-- _You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router_
+    -- _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
+    -- _You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router_
+    -- By default `/jffs/scripts-startup.sh` script is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
 
 For the full list of configuration variables - [look below](#configuration).
 
@@ -81,8 +82,9 @@ You can set configuration variables in `/etc/asuswrt-usb-network.conf`.
 | NETWORK_FUNCTION | "ecm" | Network gadget function to use<br>Supported values are: `rndis, ecm (recommended), eem, ncm` |
 | VERIFY_CONNECTION | true | Verify that we can reach gateway after enabling network gadget?<br>Recommended if using services depending on systemd's `network-online.target` |
 | SKIP_MASS_STORAGE | false | Skip adding initial mass storage gadget - instead setup network gadget right away?<br>This is only useful on Merlin firmware |
-| FAKE_ASUS_OPTWARE | false | Launch command in `script_usbmount` nvram variable through fake Asus' Optware installation?<br>(requires `SKIP_MASS_STORAGE=false`) |
+| FAKE_ASUS_OPTWARE | false | Launch startup command through fake Asus' Optware installation?<br>(requires `SKIP_MASS_STORAGE=false`) |
 | FAKE_ASUS_OPTWARE_ARCH | "arm" | Optware architecture supported by the router<br>Known values are: `arm, mipsbig, mipsel` |
+| FAKE_ASUS_OPTWARE_CMD | "/bin/sh /jffs/scripts-startup.sh start" | Command to execute when fake Asus' Optware starts<br>Setting this to empty value will use `script_usbmount` NVRAM variable |
 | TEMP_IMAGE_FILE | "/tmp/asuswrt-usb-network.img" | Temporary image file that will be created |
 | TEMP_IMAGE_SIZE | 1 | Image size in MB, might need to be increased in case your router doesn't want to mount the storage due to partition size errors |
 | TEMP_IMAGE_FS | "ext2" | Filesystem to use, must be supported by `mkfs.` command and the router, `ext2` should be fine in most cases |
