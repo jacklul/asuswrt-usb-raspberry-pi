@@ -46,12 +46,12 @@ sudo systemctl enable asuswrt-usb-network.service
 Modify configuration - `sudo nano /etc/asuswrt-usb-network.conf`:
 
 - If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true`
-  -- _We are using `services-start` script here, no need to use command startup method_
+  - _We are using `services-start` script here, no need to use command startup method_
 
 - If you're running stock firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
-    -- _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
-    -- _You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router_
-    -- By default `/jffs/scripts-startup.sh` script is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
+    - _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
+    - _You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router_
+    - By default `/jffs/scripts-startup.sh` script is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
 
 For the full list of configuration variables - [look below](#configuration).
 
