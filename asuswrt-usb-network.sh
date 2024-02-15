@@ -315,7 +315,6 @@ if [ "\$1" = "start" ]; then
     else
         logger -t "asuswrt-usb-network" "Unable to execute command in \"script_usbmount\" - value is empty"
     fi
-
 EOT
     fi
 
