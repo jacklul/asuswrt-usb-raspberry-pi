@@ -5,9 +5,8 @@ This makes any Raspberry Pi capable of becoming USB Gadget to connect to LAN net
 
 Great way to run [Pi-hole](https://pi-hole.net) in your network on a budget Raspberry Pi Zero!
 
-**Warning: This cannot be used together with Optware / Asus Download Master on stock firmware.**
-
-Everything here was tested on **RT-AX58U v2** on official firmware available at the time.
+> [!WARNING]
+> This cannot be used together with Optware / Asus Download Master on stock firmware.
 
 ## How it works
 
@@ -28,9 +27,10 @@ The script on the router also is monitoring for the interface changes in case th
 
 ### On the Raspberry Pi:
 
-Add `dtoverlay=dwc2` to **/boot/config.txt** and `modules-load=dwc2` to **/boot/cmdline.txt** after `rootwait`.
+> [!IMPORTANT]
+> Make sure you have `debugfs` command available - if not install it with `apt-get install e2fsprogs`.
 
-Make sure you have `debugfs` command available - if not install it with `apt-get install e2fsprogs`.
+Add `dtoverlay=dwc2` to **/boot/config.txt** and `modules-load=dwc2` to **/boot/cmdline.txt** after `rootwait`.
 
 Install `asuswrt-usb-network` script:
 
@@ -46,11 +46,11 @@ sudo systemctl enable asuswrt-usb-network.service
 Modify configuration - `sudo nano /etc/asuswrt-usb-network.conf`:
 
 - If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true`
-  - _We are using `services-start` script here, no need to use command startup method_
+  - _We are using `services-start` script on router side - no need to use command startup method_
 
 - If you're running stock firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
     - _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
-    - _You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router_
+    - You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router
     - By default `/jffs/scripts-startup.sh` script is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
 
 For the full list of configuration variables - [look below](#configuration).
