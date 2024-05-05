@@ -19,7 +19,7 @@ echo "Downloading required scripts..."
 [ ! -f "$TMP_DIR/usb-network.sh" ] && curl -fsS "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/$BRANCH/scripts/usb-network.sh" -o "$TMP_DIR/usb-network.sh"
 [ ! -f "$TMP_DIR/hotplug-event.sh" ] && curl -fsS "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/$BRANCH/scripts/hotplug-event.sh" -o "$TMP_DIR/hotplug-event.sh"
 
-COMMENT_LINE="# asuswrt-usb-raspberry-pi #"
+COMMENT_LINE="# asuswrt-usb-raspberry-pi"
 
 if [ "$MERLIN" = "0" ]; then
     MODIFICATION="        $COMMENT_LINE
@@ -91,8 +91,8 @@ EOT
     fi
 
     if ! grep -q "$COMMENT_LINE" /jffs/scripts/services-start; then
-        echo "/jffs/scripts/usb-network.sh start $COMMENT_LINE" >> /jffs/scripts/services-start
-        echo "/jffs/scripts/hotplug-event.sh start $COMMENT_LINE" >> /jffs/scripts/services-start
+        echo "/jffs/scripts/usb-network.sh start & $COMMENT_LINE" >> /jffs/scripts/services-start
+        echo "/jffs/scripts/hotplug-event.sh start & $COMMENT_LINE" >> /jffs/scripts/services-start
     fi
 
     if [ ! -f /jffs/scripts/service-event-end ]; then
@@ -108,7 +108,7 @@ EOT
         cat <<EOT >> /jffs/scripts/service-event-end
 case "\$2" in
     "allnet"|"net_and_phy"|"net"|"multipath"|"subnet"|"wan"|"wan_if"|"dslwan_if"|"dslwan_qis"|"dsl_wireless"|"wan_line"|"wan6"|"wan_connect"|"wan_disconnect"|"isp_meter")
-        [ -x "/jffs/scripts/usb-network.sh" ] && /jffs/scripts/usb-network.sh run $COMMENT_LINE
+        [ -x "/jffs/scripts/usb-network.sh" ] && /jffs/scripts/usb-network.sh run & $COMMENT_LINE
     ;;
 esac
 EOT
