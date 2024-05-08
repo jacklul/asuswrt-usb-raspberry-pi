@@ -17,9 +17,9 @@ for FILE in "${REQUIRED_FILES[@]}"; do
 done
 
 if [ "$MISSING_FILES" -gt 0 ]; then
-    if [ "$MISSING_FILES" != "${#MISSING_FILES[@]}" ]; then
-        mkdir -v "$SPATH/$DOWNLOAD_PATH"
-        SPATH="$SPATH/$DOWNLOAD_PATH"
+    if [ "$MISSING_FILES" = "${#REQUIRED_FILES[@]}" ]; then
+        mkdir -pv "$DOWNLOAD_PATH"
+        SPATH="$DOWNLOAD_PATH"
     fi
 
     for FILE in "${REQUIRED_FILES[@]}"; do
@@ -36,4 +36,4 @@ cp -v "$SPATH/asuswrt-usb-network.service" /etc/systemd/system && chmod 644 /etc
 
 command -v dos2unix >/dev/null 2>&1 && dos2unix /usr/local/sbin/asuswrt-usb-network
 
-echo "Then enable this service run \"sudo systemctl enable asuswrt-usb-network.service\""
+echo "To enable the service run \"sudo systemctl enable asuswrt-usb-network.service\" command."
