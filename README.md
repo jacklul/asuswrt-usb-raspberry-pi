@@ -39,6 +39,7 @@ wget -O - "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/ma
 ```
 
 Then enable it:
+
 ```bash
 sudo systemctl enable asuswrt-usb-network.service
 ```
@@ -46,12 +47,12 @@ sudo systemctl enable asuswrt-usb-network.service
 Modify configuration - `sudo nano /etc/asuswrt-usb-network.conf`:
 
 - If you're running [Asuswrt-Merlin](https://www.asuswrt-merlin.net) set `SKIP_MASS_STORAGE=true`
-  - _We are using `services-start` script on router side - no need to use command startup method_
+  - _We are using `services-start` script on the router side - no need to use command startup method_
 
-- If you're running stock firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
+- If you're running official firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
     - _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
-    - You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router
-    - By default `/jffs/scripts-startup.sh` script is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
+    - You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router (set to `arm` by default)
+    - By default `/bin/sh /jffs/scripts-startup.sh start` command is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
 
 For the full list of configuration variables - [look below](#configuration).
 
@@ -63,9 +64,12 @@ Enable the SSH access in the router, connect to it and then execute this command
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/master/install_router.sh" | sh
 ```
 
-_This command will install required scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository and apply required modifications._
+_This command will install required scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
 
-_On Merlin firmware it will use `services-start` scripts instead of `scripts-startup.sh`._
+_On Asuswrt-Merlin `/jffs/scripts/services-start` will be used instead of `/jffs/scripts-startup.sh`._
+
+> [!IMPORTANT]
+> Do not run `/jffs/scripts-startup.sh install` as it will overwrite the value of `script_usbmount` NVRAM variable set by `install_router.sh` script!
 
 ### Finish
 
@@ -81,7 +85,7 @@ You can set configuration variables in `/etc/asuswrt-usb-network.conf`.
 | --- | --- | --- |
 | NETWORK_FUNCTION | "ecm" | Network gadget function to use<br>Supported values are: `rndis, ecm (recommended), eem, ncm` |
 | VERIFY_CONNECTION | true | Verify that we can reach gateway after enabling network gadget?<br>Recommended if using services depending on systemd's `network-online.target` |
-| SKIP_MASS_STORAGE | false | Skip adding initial mass storage gadget - instead setup network gadget right away?<br>This is only useful on Merlin firmware |
+| SKIP_MASS_STORAGE | false | Skip adding initial mass storage gadget - instead setup network gadget right away?<br>This is only useful on Asuswrt-Merlin firmware |
 | FAKE_ASUS_OPTWARE | false | Launch startup command through fake Asus' Optware installation?<br>(requires `SKIP_MASS_STORAGE=false`) |
 | FAKE_ASUS_OPTWARE_ARCH | "arm" | Optware architecture supported by the router<br>Known values are: `arm, mipsbig, mipsel` |
 | FAKE_ASUS_OPTWARE_CMD | "/bin/sh /jffs/scripts-startup.sh start" | Command to execute when fake Asus' Optware starts<br>Setting this to empty value will use `script_usbmount` NVRAM variable |
@@ -121,15 +125,17 @@ You can set configuration variables in `/etc/asuswrt-usb-network.conf`.
 | GADGET_STORAGE_INQUIRY_STRING | " " | Change value of `inquiry_string`, empty means system default<br>Must be in this format: `vendor(len 8) + model(len 16) + rev(len 4)` |
 | GADGET_SCRIPT | " " | Run custom script just before gadget creation, must be a valid path to executable script file, receives argument with device's `configfs` path |
 
-## Recommended setup for Pi-hole on a Pi (Zero)
+## Setup for Pi-hole on a Pi (Zero)
 
 Install [`force-dns.sh`](https://github.com/jacklul/asuswrt-scripts#user-content-force-dnssh) script to force LAN and Guest WiFi clients to use the Pi-hole:
 
 ```sh
-curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/force-dns.sh" -o /jffs/scripts/force-dns.sh && chmod +x /jffs/scripts/force-dns.sh
+curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/force-dns.sh" -o /jffs/scripts/force-dns.sh
+chmod +x /jffs/scripts/force-dns.sh
 ```
 
 Edit `/jffs/scripts/force-dns.conf` and paste the following:
+
 ```
 PERMIT_MAC="01:02:03:04:05:06"
 #PERMIT_IP="192.168.1.251-192.168.1.254"
@@ -139,15 +145,17 @@ BLOCK_ROUTER_DNS=true
 ```
 
 Replace `01:02:03:04:05:06` with the MAC address of the `usb0` interface on the Pi - to grab it execute the following command on the Pi:
+
 ```bash
 sudo asuswrt-usb-network status
+# the `Host MAC` is the value you want to pick
 ```
-The `Host MAC` is the value you want to pick.
 
 You can add IPs or IP ranges to `PERMIT_IP` variable to prevent that IPs from having their DNS server forced.
 Use `FALLBACK_DNS_SERVER` in case the Pi disconnects from the router, it can also be set to the router's IP address.
 
 **When running Pi-hole on the Pi it will be beneficial to run `force-dns.sh` right after Pi connect to the router** - edit `/jffs/scripts/usb-network.conf` and paste the following:
+
 ```
 EXECUTE_COMMAND="/jffs/scripts/force-dns.sh run"
 ```
@@ -155,6 +163,7 @@ EXECUTE_COMMAND="/jffs/scripts/force-dns.sh run"
 ## Running Entware
 
 Create an image that will serve as storage:
+
 ```bash
 sudo dd if=/dev/zero of=/mass_storage.img bs=1M count=1024
 # OR use fallocate which is faster
@@ -165,11 +174,13 @@ sudo mkfs.ext2 /mass_storage.img
 ```
 
 Modify the configuration in `/etc/asuswrt-usb-network.conf`:
+
 ```
 GADGET_STORAGE_FILE="/mass_storage.img"
 ```
 
 Then you will need to install few scripts from [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts) on the router:
+
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/usb-mount.sh" -o /jffs/scripts/usb-mount.sh
 curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/entware.sh" -o /jffs/scripts/entware.sh
@@ -177,6 +188,7 @@ chmod +x /jffs/scripts/usb-mount.sh /jffs/scripts/entware.sh
 ```
 
 Reboot the Pi, wait for the storage to be mounted by `usb-mount.sh` script then install Entware by using this command:
+
 ```bash
 /jffs/scripts/entware.sh install
 ```
