@@ -300,6 +300,7 @@ create_fake_asus_optware() {
 #!/bin/sh
 
 if [ "\$1" = "start" ]; then
+    [ -f /jffs/asuswrt-usb-network.sh ] && /bin/sh /jffs/asuswrt-usb-network.sh &
     eval "$FAKE_ASUS_OPTWARE_CMD" || true
 EOT
     else
