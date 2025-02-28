@@ -295,29 +295,32 @@ create_fake_asus_optware() {
     echo "dest /opt/ /" > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/ipkg.conf"
     touch "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/.asusrouter"
 
+    cat <<EOT > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+#!/bin/sh
+
+if [ "\$1" = "start" ]; then
+    if [ -x /jffs/asuswrt-usb-network.sh ]; then
+        logger -t "asuswrt-usb-network" "Executing script: /jffs/asuswrt-usb-network.sh"
+        /bin/sh /jffs/asuswrt-usb-network.sh &
+    fi
+EOT
+
     if [ -n "$FAKE_ASUS_OPTWARE_CMD" ]; then
-        cat <<EOT > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
-#!/bin/sh
+        cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
 
-if [ "\$1" = "start" ]; then
-    [ -f /jffs/asuswrt-usb-network.sh ] && /bin/sh /jffs/asuswrt-usb-network.sh &
-    eval "$FAKE_ASUS_OPTWARE_CMD" || true
+    logger -t "asuswrt-usb-network" "Executing command: $FAKE_ASUS_OPTWARE_CMD"
+    eval "$FAKE_ASUS_OPTWARE_CMD" &
 EOT
-    else
-        cat <<EOT > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
-#!/bin/sh
+    fi
 
-if [ "\$1" = "start" ]; then
+    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+
     NVRAM_SCRIPT="\$(nvram get script_usbmount)"
-
     if [ -n "\$NVRAM_SCRIPT" ]; then
-        logger -t "asuswrt-usb-network" "Executing command in \"script_usbmount\"..."
-        eval "\$NVRAM_SCRIPT" || true
-    else
-        logger -t "asuswrt-usb-network" "Unable to execute command in \"script_usbmount\" - value is empty"
+        logger -t "asuswrt-usb-network" "Executing command: \$NVRAM_SCRIPT"
+        eval "\$NVRAM_SCRIPT" &
     fi
 EOT
-    fi
 
     # list of state vars taken from src/router/rc/services.c
     # we reset some apps_ vars to not end up with random bugs (web UI persistently trying to install apps in a loop)
