@@ -50,7 +50,7 @@ if [ -n "\$MOUNTED_PATHS" ]; then
         touch "\$MOUNTED_PATH/asuswrt-usb-network-mark" && sync
 
         if umount "\$MOUNTED_PATH"; then
-            rm -rf "\$MOUNTED_PATH"
+            rm -f "\$MOUNTED_PATH"
             logger -st "\$SCRIPT_TAG" "Unmounted \$MOUNTED_PATH..."
         else
             logger -st "\$SCRIPT_TAG" "Failed to unmount \$MOUNTED_PATH"
