@@ -15,54 +15,6 @@ set -e
 echo "Downloading required scripts..."
 
 if [ -z "$MERLIN" ]; then
-    cat <<EOT > $TMP_DIR/asuswrt-usb-network.sh
-#!/bin/sh
-# Made by Jack'lul <jacklul.github.io>
-#
-# This script gets executed on USB mount event
-# It writes a "mark" file to the storage to let the script
-# on the Raspberry Pi side know that it can continue
-#
-# For more information, see:
-# https://github.com/jacklul/asuswrt-usb-raspberry-pi
-#
-
-readonly SCRIPT_PATH="\$(readlink -f "\$0")"
-readonly SCRIPT_TAG="\$(basename "\$SCRIPT_PATH")"
-
-MOUNTED_PATHS="\$(df | grep /dev/sd | awk '{print \$NF}')"
-FOUND_PATH=""
-
-if [ -n "\$MOUNTED_PATHS" ]; then
-    for MOUNTED_PATH in \$MOUNTED_PATHS; do
-        [ ! -d "\$MOUNTED_PATH/asuswrt-usb-network" ] && continue
-        FOUND_PATH="\$MOUNTED_PATH"
-
-        logger -st "\$SCRIPT_TAG" "Waiting for mount \$MOUNTED_PATH to be idle..."
-
-        TIMER=0
-        while [ -n "\$(lsof | grep "\$MOUNTED_PATH")" ] && [ "\$TIMER" -lt "60" ] ; do
-            TIMER=\$((TIMER+1))
-            sleep 1
-        done
-
-        logger -st "\$SCRIPT_TAG" "Writing mark to mount \$MOUNTED_PATH..."
-        touch "\$MOUNTED_PATH/asuswrt-usb-network-mark" && sync
-
-        if umount "\$MOUNTED_PATH"; then
-            rm -f "\$MOUNTED_PATH"
-            logger -st "\$SCRIPT_TAG" "Unmounted \$MOUNTED_PATH..."
-        else
-            logger -st "\$SCRIPT_TAG" "Failed to unmount \$MOUNTED_PATH"
-        fi
-
-        break
-    done
-fi
-
-[ -z "\$FOUND_PATH" ] && logger -st "\$SCRIPT_TAG" "Could not find storage mount point"
-EOT
-
     [ ! -f "$TMP_DIR/scripts-startup.sh" ] && curl -fsS "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/$BRANCH/scripts-startup.sh" -o "$TMP_DIR/scripts-startup.sh"
 fi
 
@@ -71,15 +23,11 @@ fi
 
 echo "Setting permissions..."
 
-chmod +x "$TMP_DIR/asuswrt-usb-network.sh" "$TMP_DIR/scripts-startup.sh" "$TMP_DIR/usb-network.sh" "$TMP_DIR/hotplug-event.sh"
+chmod +x "$TMP_DIR/scripts-startup.sh" "$TMP_DIR/usb-network.sh" "$TMP_DIR/hotplug-event.sh"
 
 echo "Moving files to /jffs..."
 
 mkdir -vp "/jffs/scripts"
-
-if [ -z "$MERLIN" ] && [ "$(md5sum "$TMP_DIR/asuswrt-usb-network.sh" | awk '{print $1}')" != "$(md5sum "/jffs/asuswrt-usb-network.sh" 2> /dev/null | awk '{print $1}')" ]; then
-    cp -v "$TMP_DIR/asuswrt-usb-network.sh" "/jffs/asuswrt-usb-network.sh"
-fi
 
 if [ -z "$MERLIN" ] && [ "$(md5sum "$TMP_DIR/scripts-startup.sh" | awk '{print $1}')" != "$(md5sum "/jffs/scripts-startup.sh" 2> /dev/null | awk '{print $1}')" ]; then
     cp -v "$TMP_DIR/scripts-startup.sh" "/jffs/scripts-startup.sh"
@@ -94,14 +42,7 @@ if [ "$(md5sum "$TMP_DIR/hotplug-event.sh" | awk '{print $1}')" != "$(md5sum "/j
 fi
 
 if [ -z "$MERLIN" ]; then
-    NVRAM_SCRIPT="/bin/sh /jffs/asuswrt-usb-network.sh &; /bin/sh /jffs/scripts-startup.sh start"
-
-    if [ "$(nvram get script_usbmount)" != "$NVRAM_SCRIPT" ]; then
-        echo "Setting NVRAM variable \"script_usbmount\" to \"$NVRAM_SCRIPT\""
-
-        nvram set script_usbmount="$NVRAM_SCRIPT"
-        nvram commit
-    fi
+    sh /jffs/scripts-startup.sh install
 else
     COMMENT_LINE="# asuswrt-usb-raspberry-pi"
 

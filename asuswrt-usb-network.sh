@@ -285,46 +285,78 @@ create_image() {
 
 create_fake_asus_optware() {
     local DESTINATION_PATH="$1"
+    local ASUSWARE_PATH="$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH"
 
     [ ! -d "$DESTINATION_PATH" ] && { echo "Destination path does not exist"; exit 2; }
 
     echo "Creating fake Asus Optware installation..."
 
-    mkdir -p "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d" "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/lists" "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/info"
+    mkdir -p "$ASUSWARE_PATH/etc/init.d" "$ASUSWARE_PATH/lib/ipkg/lists" "$ASUSWARE_PATH/lib/ipkg/info"
 
-    echo "dest /opt/ /" > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/ipkg.conf"
-    touch "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/.asusrouter"
+    echo "dest /opt/ /" > "$ASUSWARE_PATH/etc/ipkg.conf"
+    touch "$ASUSWARE_PATH/.asusrouter"
 
-    cat <<EOT > "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+    cat <<EOT > "$ASUSWARE_PATH/etc/init.d/S50asuswrt-usb-network"
 #!/bin/sh
 
+tag="asuswrt-usb-network"
+
 if [ "\$1" = "start" ]; then
-    if [ -x /jffs/asuswrt-usb-network.sh ]; then
-        logger -t "asuswrt-usb-network" "Executing script: /jffs/asuswrt-usb-network.sh"
-        /bin/sh /jffs/asuswrt-usb-network.sh &
-    fi
+    {
+        mounts="\$(df | grep /dev/sd | awk '{print \$NF}')"
+        found=
+
+        if [ -n "\$mounts" ]; then
+            for mount in \$mounts; do
+                [ ! -d "\$mount/asuswrt-usb-network" ] && continue
+                found="\$mount"
+
+                logger -st "\$tag" "Waiting for mount \$mount to be idle..."
+
+                timer=0
+                while [ -n "\$(lsof | grep "\$mount")" ] && [ "\$timer" -lt "60" ] ; do
+                    timer=\$((timer+1))
+                    sleep 1
+                done
+
+                logger -st "\$tag" "Writing mark to mount \$mount..."
+                touch "\$mount/asuswrt-usb-network-mark" && sync
+
+                if umount "\$mount"; then
+                    rm -f "\$mount"
+                    logger -st "\$tag" "Unmounted \$mount..."
+                else
+                    logger -st "\$tag" "Failed to unmount \$mount"
+                fi
+
+                break
+            done
+        fi
+
+        [ -z "\$found" ] && logger -st "\$tag" "Could not find storage mount point"
+    } &
 EOT
 
     if [ -n "$FAKE_ASUS_OPTWARE_CMD" ]; then
-        cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+        cat <<EOT >> "$ASUSWARE_PATH/etc/init.d/S50asuswrt-usb-network"
 
-    logger -t "asuswrt-usb-network" "Executing command: $FAKE_ASUS_OPTWARE_CMD"
-    eval "$FAKE_ASUS_OPTWARE_CMD" &
+    logger -st "\$tag" "Executing command: $FAKE_ASUS_OPTWARE_CMD"
+    eval "$FAKE_ASUS_OPTWARE_CMD"
+EOT
+    else
+        cat <<EOT >> "$ASUSWARE_PATH/etc/init.d/S50asuswrt-usb-network"
+
+    nvram_script="\$(nvram get script_usbmount)"
+    if [ -n "\$nvram_script" ]; then
+        logger -st "\$tag" "Executing command: \$nvram_script"
+        eval "\$nvram_script"
+    fi
 EOT
     fi
-
-    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
-
-    NVRAM_SCRIPT="\$(nvram get script_usbmount)"
-    if [ -n "\$NVRAM_SCRIPT" ]; then
-        logger -t "asuswrt-usb-network" "Executing command: \$NVRAM_SCRIPT"
-        eval "\$NVRAM_SCRIPT" &
-    fi
-EOT
 
     # list of state vars taken from src/router/rc/services.c
     # we reset some apps_ vars to not end up with random bugs (web UI persistently trying to install apps in a loop)
-    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+    cat <<EOT >> "$ASUSWARE_PATH/etc/init.d/S50asuswrt-usb-network"
 
     {
         sleep 15
@@ -342,12 +374,14 @@ EOT
         nvram set apps_mounted_path=
         nvram set apps_dev=
     } &
+else
+    logger -st "\$tag" "Unsupported action: \$1"
 fi
 EOT
 
-    chmod +x "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/etc/init.d/S50asuswrt-usb-network"
+    chmod +x "$ASUSWARE_PATH/etc/init.d/S50asuswrt-usb-network"
 
-    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/status"
+    cat <<EOT >> "$ASUSWARE_PATH/lib/ipkg/status"
 Package: asuswrt-usb-network
 Version: 1.0.0.0
 Status: install user installed
@@ -355,13 +389,13 @@ Architecture: $FAKE_ASUS_OPTWARE_ARCH
 Installed-Time: 0
 EOT
 
-    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/lists/optware.asus"
+    cat <<EOT >> "$ASUSWARE_PATH/lib/ipkg/lists/optware.asus"
 Package: asuswrt-usb-network
 Version: 1.0.0.0
 Architecture: $FAKE_ASUS_OPTWARE_ARCH
 EOT
 
-    cat <<EOT >> "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH/lib/ipkg/info/asuswrt-usb-network.control"
+    cat <<EOT >> "$ASUSWARE_PATH/lib/ipkg/info/asuswrt-usb-network.control"
 Package: asuswrt-usb-network
 Architecture: $FAKE_ASUS_OPTWARE_ARCH
 Priority: optional
@@ -376,7 +410,7 @@ EOT
 
     # per src/router/rc/init.c and src/router/rom/apps_scripts/ mipsel does not use a postfix
     if [ "${FAKE_ASUS_OPTWARE_ARCH,,}" = "mipsel" ]; then
-        mv "$DESTINATION_PATH/asusware.$FAKE_ASUS_OPTWARE_ARCH" "$DESTINATION_PATH/asusware"
+        mv "$ASUSWARE_PATH" "$DESTINATION_PATH/asusware"
     fi
 }
 
