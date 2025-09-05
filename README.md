@@ -52,7 +52,7 @@ Modify configuration - `sudo nano /etc/asuswrt-usb-network.conf`:
 - If you're running official firmware in most cases you will need to set `FAKE_ASUS_OPTWARE=true`
   - _Newer firmware versions dropped support for `script_usbmount` NVRAM variable so we need a workaround_
   - You might also need to change `ASUS_OPTWARE_ARCH` to reflect architecture of the router (set to `arm` by default)
-  - By default `/bin/sh /jffs/scripts-startup.sh start` command is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
+  - By default `/bin/sh /jffs/scripts/usb-mount-script` command is executed on the router - you can change this with `FAKE_ASUS_OPTWARE_CMD` variable
 
 For the full list of configuration variables - [look below](#configuration).
 
@@ -66,10 +66,7 @@ curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-usb-raspberry-pi/m
 
 _This command will install required scripts from [jacklul/asuswrt-scripts](https://github.com/jacklul/asuswrt-scripts) repository._
 
-_On Asuswrt-Merlin `/jffs/scripts/services-start` will be used instead of `/jffs/scripts-startup.sh`._
-
-> [!IMPORTANT]
-> Do not run `/jffs/scripts-startup.sh install` as it will overwrite the value of `script_usbmount` NVRAM variable set by `install_router.sh` script!
+_On Asuswrt-Merlin `/jffs/scripts/services-start` will be used instead of `/jffs/scripts/usb-mount-script`._
 
 ### Finish
 
@@ -88,7 +85,7 @@ You can set configuration variables in `/etc/asuswrt-usb-network.conf`.
 | SKIP_MASS_STORAGE | false | Skip adding initial mass storage gadget - instead setup network gadget right away?<br>This is only useful on Asuswrt-Merlin firmware |
 | FAKE_ASUS_OPTWARE | false | Launch startup command through fake Asus' Optware installation?<br>(requires `SKIP_MASS_STORAGE=false`) |
 | FAKE_ASUS_OPTWARE_ARCH | "arm" | Optware architecture supported by the router<br>Known values are: `arm, mipsbig, mipsel` |
-| FAKE_ASUS_OPTWARE_CMD | "/bin/sh /jffs/scripts-startup.sh start" | Command to execute when fake Asus' Optware starts |
+| FAKE_ASUS_OPTWARE_CMD | "/bin/sh /jffs/scripts/usb-mount-script" | Command to execute when fake Asus' Optware starts |
 | TEMP_IMAGE_FILE | "/tmp/asuswrt-usb-network.img" | Temporary image file that will be created |
 | TEMP_IMAGE_SIZE | 1 | Image size in MB, might need to be increased in case your router doesn't want to mount the storage due to partition size errors |
 | TEMP_IMAGE_FS | "ext2" | Filesystem to use, must be supported by `mkfs.` command and the router, `ext2` should be fine in most cases |
