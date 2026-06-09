@@ -127,11 +127,10 @@ You can set configuration variables in `/etc/asuswrt-usb-network.conf`.
 Install [`force-dns.sh`](https://github.com/jacklul/asuswrt-scripts#user-content-force-dnssh) script to force LAN and Guest WiFi clients to use the Pi-hole:
 
 ```sh
-curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/force-dns.sh" -o /jffs/scripts/force-dns.sh
-chmod +x /jffs/scripts/force-dns.sh
+/jffs/scripts/jas.sh install force-dns
 ```
 
-Edit `/jffs/scripts/force-dns.conf` and paste the following:
+Edit `/jffs/scripts/jas/force-dns.conf` and paste the following:
 
 ```
 PERMIT_MAC="01:02:03:04:05:06"
@@ -151,43 +150,8 @@ sudo asuswrt-usb-network status
 You can add IPs or IP ranges to `PERMIT_IP` variable to prevent that IPs from having their DNS server forced.
 Use `FALLBACK_DNS_SERVER` in case the Pi disconnects from the router, it can also be set to the router's IP address.
 
-**When running Pi-hole on the Pi it will be beneficial to run `force-dns.sh` right after Pi connect to the router** - edit `/jffs/scripts/usb-network.conf` and paste the following:
+**When running Pi-hole on the Pi it will be beneficial to run `force-dns.sh` right after Pi connect to the router** - edit `/jffs/scripts/jas/usb-network.conf` and paste the following:
 
 ```
-EXECUTE_COMMAND="/jffs/scripts/force-dns.sh run"
+EXECUTE_COMMAND="/jffs/scripts/jas/force-dns.sh run"
 ```
-
-## Running Entware
-
-Create an image that will serve as storage:
-
-```bash
-sudo dd if=/dev/zero of=/mass_storage.img bs=1M count=1024
-# OR use fallocate which is faster
-sudo fallocate -l 1G /mass_storage.img
-
-# format as ext2 for compatibility
-sudo mkfs.ext2 /mass_storage.img
-```
-
-Modify the configuration in `/etc/asuswrt-usb-network.conf`:
-
-```
-GADGET_STORAGE_FILE="/mass_storage.img"
-```
-
-Then you will need to install few scripts from [jacklul/asuswrt-scripts repository](https://github.com/jacklul/asuswrt-scripts) on the router:
-
-```bash
-curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/usb-mount.sh" -o /jffs/scripts/usb-mount.sh
-curl -fsSL "https://raw.githubusercontent.com/jacklul/asuswrt-scripts/master/scripts/entware.sh" -o /jffs/scripts/entware.sh
-chmod +x /jffs/scripts/usb-mount.sh /jffs/scripts/entware.sh
-```
-
-Reboot the Pi, wait for the storage to be mounted by `usb-mount.sh` script then install Entware by using this command:
-
-```bash
-/jffs/scripts/entware.sh install
-```
-
-It will now automatically mount and boot Entware after scripts are started.
